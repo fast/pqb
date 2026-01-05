@@ -12,11 +12,22 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//! A template library.
+//! # A PostgreSQL Query Builder
+//!
+//! `pqb` is a Rust library designed to facilitate the construction of SQL queries for PostgreSQL
+//! databases. It provides a type-safe and ergonomic API to build complex queries programmatically.
+//!
+//! # Examples
+//!
+//! ```
+//! use pqb::query;
+//!
+//! let _select = query::select().to_sql();
+//! ```
 
 #![cfg_attr(docsrs, feature(doc_cfg))]
+#![deny(missing_docs)]
 
-/// A placeholder function.
-pub fn hello() {
-    println!("Hello, world!");
-}
+pub mod expr;
+pub mod query;
+pub mod types;

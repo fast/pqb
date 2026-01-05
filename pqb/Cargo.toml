@@ -13,8 +13,12 @@
 # limitations under the License.
 
 [package]
-name = "template"
-version = "0.1.0"
+name = "pqb"
+version = "0.0.1"
+
+categories = ["database"]
+description = "A PostgreSQL Query Builder"
+keywords = ["database", "postgres", "postgresql", "sql"]
 
 edition.workspace = true
 homepage.workspace = true

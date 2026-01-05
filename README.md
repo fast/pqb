@@ -1,4 +1,11 @@
-# Fast template for developing a new Rust project
+```text
+                   __
+    ____   ____ _ / /_
+   / __ \ / __ `// __ \
+  / /_/ // /_/ // /_/ /
+ / .___/ \__, //_.___/
+/_/        /_/
+```
 
 [![Crates.io][crates-badge]][crates-url]
 [![Documentation][docs-badge]][docs-url]
@@ -6,24 +13,23 @@
 [![Apache 2.0 licensed][license-badge]][license-url]
 [![Build Status][actions-badge]][actions-url]
 
-[crates-badge]: https://img.shields.io/crates/v/${projectName}.svg
-[crates-url]: https://crates.io/crates/${projectName}
-[docs-badge]: https://img.shields.io/docsrs/${projectName}
-[docs-url]: https://docs.rs/${projectName}
+[crates-badge]: https://img.shields.io/crates/v/pqb.svg
+[crates-url]: https://crates.io/crates/pqb
+[docs-badge]: https://img.shields.io/docsrs/pqb
+[docs-url]: https://docs.rs/pqb
 [msrv-badge]: https://img.shields.io/badge/MSRV-1.85-green?logo=rust
-[license-badge]: https://img.shields.io/crates/l/${projectName}
+[license-badge]: https://img.shields.io/crates/l/pqb
 [license-url]: LICENSE
-[actions-badge]: https://github.com/fast/template/workflows/CI/badge.svg
-[actions-url]: https://github.com/fast/template/actions?query=workflow%3ACI
+[actions-badge]: https://github.com/tisonkun/pqb/workflows/CI/badge.svg
+[actions-url]: https://github.com/tisonkun/pqb/actions?query=workflow%3ACI
 
-Use this repository as a GitHub template to quickly start a new Rust project.
+`pqb` is a PostgreSQL query builder.
 
-## Getting Started
+## Installation
 
-1. Create a new repository using this template;
-2. Clone your repository and run the bootstrap script: `./bootstrap.py`;
-3. Follow the prompts, review changes, and commit;
-4. Start building your project!
+```shell
+cargo add pqb
+```
 
 ## Minimum Rust version policy
 
