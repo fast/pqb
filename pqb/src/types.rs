@@ -22,6 +22,13 @@ pub struct Iden {
     name: Cow<'static, str>,
 }
 
+impl Iden {
+    /// Create a new identifier.
+    pub fn new(name: impl Into<Cow<'static, str>>) -> Self {
+        Self { name: name.into() }
+    }
+}
+
 /// Table references
 #[derive(Debug, Clone, PartialEq)]
 #[non_exhaustive]
