@@ -12,19 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//! Container for all SQL value types.
-
-use crate::writer::SqlWriter;
-
-/// SQL value variants.
-pub enum Value {
-    /// A nullable boolean value.
-    Bool(Option<bool>),
-}
-
-pub(crate) fn write_value<W: SqlWriter>(w: &mut W, value: &Value) {
-    match value {
-        Value::Bool(None) => w.push_str("NULL"),
-        Value::Bool(Some(b)) => w.push_str(if *b { "TRUE" } else { "FALSE" }),
-    }
+#[test]
+fn select_0() {
+    let select = pqb::query::select().to_sql();
+    insta::assert_snapshot!(select, @"SELECT");
 }

@@ -17,7 +17,11 @@
 //! [`Expr`] is an arbitrary, dynamically-typed SQL expression.
 //! It can be used in select fields, where clauses and many other places.
 
+use crate::types::ColumnName;
 use crate::types::ColumnRef;
+use crate::types::write_iden;
+use crate::types::write_table_name;
+use crate::writer::SqlWriter;
 
 /// An arbitrary, dynamically-typed SQL expression.
 #[derive(Debug, Clone, PartialEq)]
@@ -25,4 +29,31 @@ use crate::types::ColumnRef;
 pub enum Expr {
     /// A reference to a column.
     Column(ColumnRef),
+}
+
+pub(crate) fn write_expr<W: SqlWriter>(w: &mut W, expr: &Expr) {
+    match expr {
+        Expr::Column(col) => {
+            write_column_ref(w, col);
+        }
+    }
+}
+
+fn write_column_ref<W: SqlWriter>(w: &mut W, col: &ColumnRef) {
+    match col {
+        ColumnRef::Column(ColumnName(table_name, column)) => {
+            if let Some(table_name) = table_name {
+                write_table_name(w, table_name);
+                w.push_char('.');
+            }
+            write_iden(w, column);
+        }
+        ColumnRef::Asterisk(table_name) => {
+            if let Some(table_name) = table_name {
+                write_table_name(w, table_name);
+                w.push_char('.');
+            }
+            w.push_char('*');
+        }
+    }
 }

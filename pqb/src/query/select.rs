@@ -13,9 +13,12 @@
 // limitations under the License.
 
 use crate::expr::Expr;
+use crate::expr::write_expr;
 use crate::types::Iden;
 use crate::types::TableRef;
-use crate::writer::write_select_statement;
+use crate::types::write_iden;
+use crate::types::write_table_name;
+use crate::writer::SqlWriter;
 
 /// Select rows from an existing table.
 pub struct SelectStatement {
@@ -46,4 +49,40 @@ impl SelectStatement {
 pub struct SelectExpr {
     expr: Expr,
     alias: Option<Iden>,
+}
+
+pub(crate) fn write_select_statement<W: SqlWriter>(w: &mut W, statement: &SelectStatement) {
+    w.push_str("SELECT ");
+
+    for (i, select_expr) in statement.selects.iter().enumerate() {
+        if i > 0 {
+            w.push_str(", ");
+        }
+        write_select_expr(w, select_expr);
+    }
+
+    for (i, table_ref) in statement.from.iter().enumerate() {
+        if i == 0 {
+            w.push_str(" FROM ");
+        } else {
+            w.push_str(", ");
+        }
+        match table_ref {
+            TableRef::Table(table_name, alias) => {
+                write_table_name(w, table_name);
+                if let Some(alias) = alias {
+                    w.push_str(" AS ");
+                    write_iden(w, alias);
+                }
+            }
+        }
+    }
+}
+
+fn write_select_expr<W: SqlWriter>(w: &mut W, select_expr: &SelectExpr) {
+    write_expr(w, &select_expr.expr);
+    if let Some(alias) = &select_expr.alias {
+        w.push_str(" AS ");
+        write_iden(w, alias);
+    }
 }

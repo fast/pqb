@@ -12,19 +12,27 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//! Container for all SQL value types.
+use crate::value::Value;
+use crate::value::write_value;
 
-use crate::writer::SqlWriter;
+pub trait SqlWriter {
+    fn push_param(&mut self, value: Value);
 
-/// SQL value variants.
-pub enum Value {
-    /// A nullable boolean value.
-    Bool(Option<bool>),
+    fn push_str(&mut self, value: &str);
+
+    fn push_char(&mut self, value: char);
 }
 
-pub(crate) fn write_value<W: SqlWriter>(w: &mut W, value: &Value) {
-    match value {
-        Value::Bool(None) => w.push_str("NULL"),
-        Value::Bool(Some(b)) => w.push_str(if *b { "TRUE" } else { "FALSE" }),
+impl SqlWriter for String {
+    fn push_param(&mut self, value: Value) {
+        write_value(self, &value);
+    }
+
+    fn push_str(&mut self, value: &str) {
+        String::push_str(self, value)
+    }
+
+    fn push_char(&mut self, value: char) {
+        String::push(self, value)
     }
 }
