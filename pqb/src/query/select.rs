@@ -27,6 +27,21 @@ pub struct SelectStatement {
 }
 
 impl SelectStatement {
+    /// From table.
+    pub fn from(mut self, table: impl Into<TableRef>) -> Self {
+        self.from.push(table.into());
+        self
+    }
+
+    /// Add an expression to the select expression list.
+    pub fn expr<T>(&mut self, expr: T) -> &mut Self
+    where
+        T: Into<SelectExpr>,
+    {
+        self.selects.push(expr.into());
+        self
+    }
+
     /// Convert the select statement to a PostgreSQL query string.
     pub fn to_sql(&self) -> String {
         let mut sql = String::new();
@@ -49,6 +64,18 @@ impl SelectStatement {
 pub struct SelectExpr {
     expr: Expr,
     alias: Option<Iden>,
+}
+
+impl<T> From<T> for SelectExpr
+where
+    T: Into<Expr>,
+{
+    fn from(expr: T) -> Self {
+        SelectExpr {
+            expr: expr.into(),
+            alias: None,
+        }
+    }
 }
 
 pub(crate) fn write_select_statement<W: SqlWriter>(w: &mut W, statement: &SelectStatement) {

@@ -17,14 +17,54 @@
 use crate::writer::SqlWriter;
 
 /// SQL value variants.
+#[derive(Debug, Clone, PartialEq)]
 pub enum Value {
-    /// A nullable boolean value.
+    /// Boolean value.
     Bool(Option<bool>),
+    /// Tiny integer value.
+    TinyInt(Option<i8>),
+    /// Small integer value.
+    SmallInt(Option<i16>),
+    /// Integer value.
+    Int(Option<i32>),
+    /// Big integer value.
+    BigInt(Option<i64>),
+    /// Tiny unsigned integer value.
+    TinyUnsigned(Option<u8>),
+    /// Small unsigned integer value.
+    SmallUnsigned(Option<u16>),
+    /// Unsigned integer value.
+    Unsigned(Option<u32>),
+    /// Big unsigned integer value.
+    BigUnsigned(Option<u64>),
+    /// Floating point value.
+    Float(Option<f32>),
+    /// Double precision floating point value.
+    Double(Option<f64>),
 }
 
-pub(crate) fn write_value<W: SqlWriter>(w: &mut W, value: &Value) {
-    match value {
-        Value::Bool(None) => w.push_str("NULL"),
-        Value::Bool(Some(b)) => w.push_str(if *b { "TRUE" } else { "FALSE" }),
-    }
+macro_rules! type_to_value {
+    ( $type: ty, $name: ident ) => {
+        impl From<$type> for Value {
+            fn from(x: $type) -> Value {
+                Value::$name(Some(x))
+            }
+        }
+    };
+}
+
+type_to_value!(bool, Bool);
+type_to_value!(i8, TinyInt);
+type_to_value!(i16, SmallInt);
+type_to_value!(i32, Int);
+type_to_value!(i64, BigInt);
+type_to_value!(u8, TinyUnsigned);
+type_to_value!(u16, SmallUnsigned);
+type_to_value!(u32, Unsigned);
+type_to_value!(u64, BigUnsigned);
+type_to_value!(f32, Float);
+type_to_value!(f64, Double);
+
+pub(crate) fn write_value<W: SqlWriter>(w: &mut W, value: Value) {
+    w.push_param(value);
 }

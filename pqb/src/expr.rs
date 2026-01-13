@@ -21,6 +21,8 @@ use crate::types::ColumnName;
 use crate::types::ColumnRef;
 use crate::types::write_iden;
 use crate::types::write_table_name;
+use crate::value::Value;
+use crate::value::write_value;
 use crate::writer::SqlWriter;
 
 /// An arbitrary, dynamically-typed SQL expression.
@@ -29,12 +31,25 @@ use crate::writer::SqlWriter;
 pub enum Expr {
     /// A reference to a column.
     Column(ColumnRef),
+    /// A literal value.
+    Value(Value),
+}
+
+/// Create a new column expression from a value.
+pub fn value<T>(value: T) -> Expr
+where
+    T: Into<Value>,
+{
+    Expr::Value(value.into())
 }
 
 pub(crate) fn write_expr<W: SqlWriter>(w: &mut W, expr: &Expr) {
     match expr {
         Expr::Column(col) => {
             write_column_ref(w, col);
+        }
+        Expr::Value(value) => {
+            write_value(w, value.clone());
         }
     }
 }
