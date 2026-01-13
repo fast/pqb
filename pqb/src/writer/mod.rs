@@ -1,23 +1,22 @@
-//!
-
 use crate::value::Value;
 
-///
-pub trait SQLWriter {
-    ///
+mod query;
+pub use self::query::write_select_statement;
+
+mod value;
+pub use self::value::write_value;
+
+pub trait SqlWriter {
     fn push_param(&mut self, value: Value);
 
-    ///
     fn push_str(&mut self, value: &str);
 
-
-    ///
     fn push_char(&mut self, value: char);
 }
 
-impl SQLWriter for String {
+impl SqlWriter for String {
     fn push_param(&mut self, value: Value) {
-        todo!()
+        write_value(self, &value);
     }
 
     fn push_str(&mut self, value: &str) {

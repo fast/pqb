@@ -15,6 +15,7 @@
 use crate::expr::Expr;
 use crate::types::Iden;
 use crate::types::TableRef;
+use crate::writer::write_select_statement;
 
 /// Select rows from an existing table.
 pub struct SelectStatement {
@@ -25,9 +26,9 @@ pub struct SelectStatement {
 impl SelectStatement {
     /// Convert the select statement to a PostgreSQL query string.
     pub fn to_sql(&self) -> String {
-        let _ = self.selects.as_slice();
-        let _ = self.from.as_slice();
-        "SELECT 1".to_string()
+        let mut sql = String::new();
+        write_select_statement(&mut sql, self);
+        sql
     }
 }
 
