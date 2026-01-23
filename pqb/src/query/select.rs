@@ -21,12 +21,13 @@ use crate::types::write_table_name;
 use crate::writer::SqlWriter;
 
 /// Select rows from an existing table.
-pub struct SelectStatement {
+#[derive(Default, Debug, Clone, PartialEq)]
+pub struct Select {
     selects: Vec<SelectExpr>,
     from: Vec<TableRef>,
 }
 
-impl SelectStatement {
+impl Select {
     /// From table.
     pub fn from(mut self, table: impl Into<TableRef>) -> Self {
         self.from.push(table.into());
@@ -50,12 +51,10 @@ impl SelectStatement {
     }
 }
 
-impl SelectStatement {
-    pub(super) fn new() -> Self {
-        Self {
-            selects: vec![],
-            from: vec![],
-        }
+impl Select {
+    /// Create a new select statement.
+    pub fn new() -> Self {
+        Self::default()
     }
 }
 
@@ -78,7 +77,7 @@ where
     }
 }
 
-pub(crate) fn write_select_statement<W: SqlWriter>(w: &mut W, statement: &SelectStatement) {
+pub(crate) fn write_select_statement<W: SqlWriter>(w: &mut W, statement: &Select) {
     w.push_str("SELECT ");
 
     for (i, select_expr) in statement.selects.iter().enumerate() {

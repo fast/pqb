@@ -19,6 +19,7 @@
 
 use crate::types::ColumnName;
 use crate::types::ColumnRef;
+use crate::types::IntoColumnRef;
 use crate::types::write_iden;
 use crate::types::write_table_name;
 use crate::value::Value;
@@ -35,12 +36,22 @@ pub enum Expr {
     Value(Value),
 }
 
-/// Create a new column expression from a value.
-pub fn value<T>(value: T) -> Expr
-where
-    T: Into<Value>,
-{
-    Expr::Value(value.into())
+impl Expr {
+    /// Express a [`Value`], returning a [`Expr`].
+    pub fn value<T>(value: T) -> Expr
+    where
+        T: Into<Value>,
+    {
+        Expr::Value(value.into())
+    }
+
+    /// Express the target column, returning a [`Expr`].
+    pub fn column<T>(n: T) -> Self
+    where
+        T: IntoColumnRef,
+    {
+        Self::Column(n.into_column_ref())
+    }
 }
 
 pub(crate) fn write_expr<W: SqlWriter>(w: &mut W, expr: &Expr) {

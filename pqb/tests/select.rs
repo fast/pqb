@@ -12,11 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use pqb::expr;
-use pqb::query;
+use pqb::expr::Expr;
+use pqb::query::Select;
 
 #[test]
 fn select_0() {
-    let select = query::select().expr(expr::value(1)).to_sql();
+    let select = Select::new().expr(Expr::value(1)).to_sql();
     insta::assert_snapshot!(select, @"SELECT 1");
 }

@@ -20,9 +20,10 @@
 //! # Examples
 //!
 //! ```
-//! use pqb::query;
+//! use pqb::expr::Expr;
+//! use pqb::query::Select;
 //!
-//! let _select = query::select().to_sql();
+//! let _select = Select::new().from("tbl").expr(Expr::column("n")).to_sql();
 //! ```
 
 #![cfg_attr(docsrs, feature(doc_cfg))]

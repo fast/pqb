@@ -16,8 +16,3 @@
 
 mod select;
 pub use self::select::*;
-
-/// Create a new select query statement.
-pub fn select() -> SelectStatement {
-    SelectStatement::new()
-}
