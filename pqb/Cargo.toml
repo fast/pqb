@@ -14,7 +14,7 @@
 
 [package]
 name = "pqb"
-version = "0.0.1"
+version = "0.0.2"
 
 categories = ["database"]
 description = "A PostgreSQL Query Builder"
@@ -28,6 +28,9 @@ repository.workspace = true
 rust-version.workspace = true
 
 [dependencies]
+
+[dev-dependencies]
+insta = { version = "1.46.1" }
 
 [lints]
 workspace = true

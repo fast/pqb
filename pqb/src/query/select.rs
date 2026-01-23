@@ -13,30 +13,117 @@
 // limitations under the License.
 
 use crate::expr::Expr;
+use crate::expr::write_expr;
 use crate::types::Iden;
+use crate::types::IntoColumnRef;
+use crate::types::IntoIden;
 use crate::types::TableRef;
+use crate::types::write_iden;
+use crate::types::write_table_name;
+use crate::value::write_value;
+use crate::writer::SqlWriter;
 
 /// Select rows from an existing table.
-pub struct SelectStatement {
+#[derive(Default, Debug, Clone, PartialEq)]
+pub struct Select {
     selects: Vec<SelectExpr>,
     from: Vec<TableRef>,
+    conditions: Vec<Expr>,
+    limit: Option<u64>,
+    offset: Option<u64>,
 }
 
-impl SelectStatement {
+impl Select {
+    /// From table.
+    pub fn from(mut self, table: impl Into<TableRef>) -> Self {
+        self.from.push(table.into());
+        self
+    }
+
+    /// Add an expression to the select expression list.
+    pub fn expr<T>(mut self, expr: T) -> Self
+    where
+        T: Into<SelectExpr>,
+    {
+        self.selects.push(expr.into());
+        self
+    }
+
+    /// Add an expression to the select expression list with its alias.
+    pub fn expr_as<T, A>(mut self, expr: T, alias: A) -> Self
+    where
+        T: Into<Expr>,
+        A: IntoIden,
+    {
+        self.selects.push(SelectExpr {
+            expr: expr.into(),
+            alias: Some(alias.into_iden()),
+        });
+        self
+    }
+
+    /// Add select expressions.
+    pub fn exprs<T, I>(mut self, exprs: I) -> Self
+    where
+        T: Into<SelectExpr>,
+        I: IntoIterator<Item = T>,
+    {
+        for expr in exprs {
+            self.selects.push(expr.into());
+        }
+        self
+    }
+
+    /// Add a column to the select expression list.
+    pub fn column<C>(self, col: C) -> Self
+    where
+        C: IntoColumnRef,
+    {
+        self.expr(Expr::Column(col.into_column_ref()))
+    }
+
+    /// Select columns.
+    pub fn columns<T, I>(self, cols: I) -> Self
+    where
+        T: IntoColumnRef,
+        I: IntoIterator<Item = T>,
+    {
+        self.exprs(cols.into_iter().map(|c| Expr::Column(c.into_column_ref())))
+    }
+
+    /// And where condition.
+    pub fn and_where<T>(mut self, expr: T) -> Self
+    where
+        T: Into<Expr>,
+    {
+        self.conditions.push(expr.into());
+        self
+    }
+
+    /// Offset number of returned rows.
+    pub fn offset(mut self, offset: u64) -> Self {
+        self.offset = Some(offset);
+        self
+    }
+
+    /// Limit the number of returned rows.
+    pub fn limit(mut self, limit: u64) -> Self {
+        self.limit = Some(limit);
+        self
+    }
+
     /// Convert the select statement to a PostgreSQL query string.
     pub fn to_sql(&self) -> String {
-        let _ = self.selects.as_slice();
-        let _ = self.from.as_slice();
-        "SELECT 1".to_string()
+        let mut sql = String::new();
+        write_select_statement(&mut sql, self);
+        sql
     }
 }
 
-impl SelectStatement {
-    pub(super) fn new() -> Self {
-        Self {
-            selects: vec![],
-            from: vec![],
-        }
+impl Select {
+    /// Create a new select statement.
+    pub fn new() -> Self {
+        Self::default()
     }
 }
 
@@ -45,4 +132,67 @@ impl SelectStatement {
 pub struct SelectExpr {
     expr: Expr,
     alias: Option<Iden>,
+}
+
+impl<T> From<T> for SelectExpr
+where
+    T: Into<Expr>,
+{
+    fn from(expr: T) -> Self {
+        SelectExpr {
+            expr: expr.into(),
+            alias: None,
+        }
+    }
+}
+
+pub(crate) fn write_select_statement<W: SqlWriter>(w: &mut W, select: &Select) {
+    w.push_str("SELECT ");
+
+    for (i, select_expr) in select.selects.iter().enumerate() {
+        if i > 0 {
+            w.push_str(", ");
+        }
+        write_select_expr(w, select_expr);
+    }
+
+    for (i, table_ref) in select.from.iter().enumerate() {
+        if i == 0 {
+            w.push_str(" FROM ");
+        } else {
+            w.push_str(", ");
+        }
+        match table_ref {
+            TableRef::Table(table_name, alias) => {
+                write_table_name(w, table_name);
+                if let Some(alias) = alias {
+                    w.push_str(" AS ");
+                    write_iden(w, alias);
+                }
+            }
+        }
+    }
+
+    if let Some(condition) = Expr::from_conditions(select.conditions.clone()) {
+        w.push_str(" WHERE ");
+        write_expr(w, &condition);
+    }
+
+    if let Some(limit) = select.limit {
+        w.push_str(" LIMIT ");
+        write_value(w, limit.into());
+    }
+
+    if let Some(offset) = select.offset {
+        w.push_str(" OFFSET ");
+        write_value(w, offset.into());
+    }
+}
+
+fn write_select_expr<W: SqlWriter>(w: &mut W, select_expr: &SelectExpr) {
+    write_expr(w, &select_expr.expr);
+    if let Some(alias) = &select_expr.alias {
+        w.push_str(" AS ");
+        write_iden(w, alias);
+    }
 }
