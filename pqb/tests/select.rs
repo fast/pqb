@@ -17,6 +17,39 @@ use pqb::query::Select;
 
 #[test]
 fn select_0() {
-    let select = Select::new().expr(Expr::value(1)).to_sql();
-    insta::assert_snapshot!(select, @"SELECT 1");
+    insta::assert_snapshot!(Select::new().expr(Expr::value(1)).to_sql(), @"SELECT 1");
+
+    insta::assert_snapshot!(
+        Select::new()
+            .expr(Expr::column("n"))
+            .from("tbl")
+            .and_where(Expr::column("region").eq(Expr::value("CN")))
+            .to_sql(),
+        @r#"SELECT "n" FROM "tbl" WHERE "region" = 'CN'"#
+    );
+}
+
+#[test]
+fn select_1() {
+    insta::assert_snapshot!(
+        Select::new()
+            .columns(["character", "size_w", "size_h"])
+            .from("character")
+            .limit(10)
+            .offset(100)
+            .to_sql(),
+        @r#"SELECT "character", "size_w", "size_h" FROM "character" LIMIT 10 OFFSET 100"#
+    );
+}
+
+#[test]
+fn select_2() {
+    insta::assert_snapshot!(
+        Select::new()
+            .columns(["character", "size_w", "size_h"])
+            .from("character")
+            .and_where(Expr::column("size_w").eq(3))
+            .to_sql(),
+        @r#"SELECT "character", "size_w", "size_h" FROM "character" WHERE "size_w" = 3"#
+    );
 }

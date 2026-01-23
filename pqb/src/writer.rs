@@ -15,6 +15,7 @@
 use std::fmt::Write;
 
 use crate::value::Value;
+use crate::value::write_string_value;
 
 pub trait SqlWriter {
     fn push_param(&mut self, value: Value);
@@ -37,7 +38,8 @@ impl SqlWriter for String {
             | Value::Unsigned(None)
             | Value::BigUnsigned(None)
             | Value::Float(None)
-            | Value::Double(None) => self.push_str("NULL"),
+            | Value::Double(None)
+            | Value::String(None) => self.push_str("NULL"),
 
             Value::Bool(Some(b)) => self.push_str(if b { "TRUE" } else { "FALSE" }),
             Value::TinyInt(Some(i)) => write!(self, "{i}").unwrap(),
@@ -50,6 +52,7 @@ impl SqlWriter for String {
             Value::BigUnsigned(Some(u)) => write!(self, "{u}").unwrap(),
             Value::Float(Some(f)) => write!(self, "{f}").unwrap(),
             Value::Double(Some(f)) => write!(self, "{f}").unwrap(),
+            Value::String(Some(s)) => write_string_value(self, s.as_str()),
         }
     }
 

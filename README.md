@@ -40,3 +40,9 @@ The policy is that the minimum Rust version required to use this crate can be in
 ## License
 
 This project is licensed under [Apache License, Version 2.0](LICENSE).
+
+## Origins
+
+This project is derived from [sea-query](https://github.com/SeaQL/sea-query) with significant simplification since it is aimed at generating PostgreSQL only statements (queries).
+
+We don't need to abstract over multiple database backends, so many traits and tricks in sea-query are removed to reduce complexity.

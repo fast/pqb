@@ -15,9 +15,12 @@
 use crate::expr::Expr;
 use crate::expr::write_expr;
 use crate::types::Iden;
+use crate::types::IntoColumnRef;
+use crate::types::IntoIden;
 use crate::types::TableRef;
 use crate::types::write_iden;
 use crate::types::write_table_name;
+use crate::value::write_value;
 use crate::writer::SqlWriter;
 
 /// Select rows from an existing table.
@@ -25,6 +28,9 @@ use crate::writer::SqlWriter;
 pub struct Select {
     selects: Vec<SelectExpr>,
     from: Vec<TableRef>,
+    conditions: Vec<Expr>,
+    limit: Option<u64>,
+    offset: Option<u64>,
 }
 
 impl Select {
@@ -35,11 +41,74 @@ impl Select {
     }
 
     /// Add an expression to the select expression list.
-    pub fn expr<T>(&mut self, expr: T) -> &mut Self
+    pub fn expr<T>(mut self, expr: T) -> Self
     where
         T: Into<SelectExpr>,
     {
         self.selects.push(expr.into());
+        self
+    }
+
+    /// Add an expression to the select expression list with its alias.
+    pub fn expr_as<T, A>(mut self, expr: T, alias: A) -> Self
+    where
+        T: Into<Expr>,
+        A: IntoIden,
+    {
+        self.selects.push(SelectExpr {
+            expr: expr.into(),
+            alias: Some(alias.into_iden()),
+        });
+        self
+    }
+
+    /// Add select expressions.
+    pub fn exprs<T, I>(mut self, exprs: I) -> Self
+    where
+        T: Into<SelectExpr>,
+        I: IntoIterator<Item = T>,
+    {
+        for expr in exprs {
+            self.selects.push(expr.into());
+        }
+        self
+    }
+
+    /// Add a column to the select expression list.
+    pub fn column<C>(self, col: C) -> Self
+    where
+        C: IntoColumnRef,
+    {
+        self.expr(Expr::Column(col.into_column_ref()))
+    }
+
+    /// Select columns.
+    pub fn columns<T, I>(self, cols: I) -> Self
+    where
+        T: IntoColumnRef,
+        I: IntoIterator<Item = T>,
+    {
+        self.exprs(cols.into_iter().map(|c| Expr::Column(c.into_column_ref())))
+    }
+
+    /// And where condition.
+    pub fn and_where<T>(mut self, expr: T) -> Self
+    where
+        T: Into<Expr>,
+    {
+        self.conditions.push(expr.into());
+        self
+    }
+
+    /// Offset number of returned rows.
+    pub fn offset(mut self, offset: u64) -> Self {
+        self.offset = Some(offset);
+        self
+    }
+
+    /// Limit the number of returned rows.
+    pub fn limit(mut self, limit: u64) -> Self {
+        self.limit = Some(limit);
         self
     }
 
@@ -77,17 +146,17 @@ where
     }
 }
 
-pub(crate) fn write_select_statement<W: SqlWriter>(w: &mut W, statement: &Select) {
+pub(crate) fn write_select_statement<W: SqlWriter>(w: &mut W, select: &Select) {
     w.push_str("SELECT ");
 
-    for (i, select_expr) in statement.selects.iter().enumerate() {
+    for (i, select_expr) in select.selects.iter().enumerate() {
         if i > 0 {
             w.push_str(", ");
         }
         write_select_expr(w, select_expr);
     }
 
-    for (i, table_ref) in statement.from.iter().enumerate() {
+    for (i, table_ref) in select.from.iter().enumerate() {
         if i == 0 {
             w.push_str(" FROM ");
         } else {
@@ -102,6 +171,21 @@ pub(crate) fn write_select_statement<W: SqlWriter>(w: &mut W, statement: &Select
                 }
             }
         }
+    }
+
+    if let Some(condition) = Expr::from_conditions(select.conditions.clone()) {
+        w.push_str(" WHERE ");
+        write_expr(w, &condition);
+    }
+
+    if let Some(limit) = select.limit {
+        w.push_str(" LIMIT ");
+        write_value(w, limit.into());
+    }
+
+    if let Some(offset) = select.offset {
+        w.push_str(" OFFSET ");
+        write_value(w, offset.into());
     }
 }
 
