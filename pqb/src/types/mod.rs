@@ -16,6 +16,7 @@
 
 use std::borrow::Cow;
 
+use crate::query::Select;
 use crate::writer::SqlWriter;
 
 mod qualification;
@@ -106,6 +107,21 @@ pub struct Asterisk;
 pub enum TableRef {
     /// A table identifier with optional Alias. Potentially qualified.
     Table(TableName, Option<Iden>),
+    /// Subquery with alias
+    SubQuery(Box<Select>, Iden),
+}
+
+impl TableRef {
+    /// Add or replace the current alias
+    pub fn alias<A>(self, alias: A) -> Self
+    where
+        A: IntoIden,
+    {
+        match self {
+            Self::Table(table, _) => Self::Table(table, Some(alias.into_iden())),
+            Self::SubQuery(statement, _) => Self::SubQuery(statement, alias.into_iden()),
+        }
+    }
 }
 
 impl<T> From<T> for TableRef

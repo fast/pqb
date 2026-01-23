@@ -14,8 +14,8 @@
 
 //! Building blocks of SQL statements.
 //!
-//! [`Expr`] is an arbitrary, dynamically-typed SQL expression.
-//! It can be used in select fields, where clauses and many other places.
+//! [`Expr`] is an arbitrary, dynamically-typed SQL expression. It can be used in select fields,
+//! where clauses and many other places.
 
 use crate::types::ColumnName;
 use crate::types::ColumnRef;
@@ -32,7 +32,9 @@ use crate::writer::SqlWriter;
 #[expect(missing_docs)] // trivial
 pub enum Expr {
     Column(ColumnRef),
+    Tuple(Vec<Expr>),
     Value(Value),
+    Unary(UnaryOp, Box<Expr>),
     Binary(Box<Expr>, BinaryOp, Box<Expr>),
 }
 
@@ -51,7 +53,15 @@ impl Expr {
     where
         T: IntoColumnRef,
     {
-        Self::Column(n.into_column_ref())
+        Expr::Column(n.into_column_ref())
+    }
+
+    /// Wraps tuple of `Expr`, can be used for tuple comparison
+    pub fn tuple<I>(n: I) -> Self
+    where
+        I: IntoIterator<Item = Self>,
+    {
+        Expr::Tuple(n.into_iter().collect())
     }
 }
 
@@ -96,6 +106,49 @@ impl Expr {
     {
         self.binary(BinaryOp::NotEqual, right)
     }
+
+    /// Express a `IN` expression.
+    pub fn is_in<V, I>(self, v: I) -> Expr
+    where
+        V: Into<Expr>,
+        I: IntoIterator<Item = V>,
+    {
+        self.binary(
+            BinaryOp::In,
+            Expr::Tuple(v.into_iter().map(|v| v.into()).collect()),
+        )
+    }
+
+    /// Express a `NOT IN` expression.
+    pub fn is_not_in<V, I>(self, v: I) -> Expr
+    where
+        V: Into<Expr>,
+        I: IntoIterator<Item = V>,
+    {
+        self.binary(
+            BinaryOp::NotIn,
+            Expr::Tuple(v.into_iter().map(|v| v.into()).collect()),
+        )
+    }
+
+    /// Apply any unary operator to the expression.
+    pub fn unary(self, op: UnaryOp) -> Expr {
+        Expr::Unary(op, Box::new(self))
+    }
+
+    /// Negates an expression with `NOT`.
+    #[expect(clippy::should_implement_trait)]
+    pub fn not(self) -> Expr {
+        self.unary(UnaryOp::Not)
+    }
+}
+
+/// Unary operators.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
+#[expect(missing_docs)] // trivial
+pub enum UnaryOp {
+    Not,
 }
 
 /// Binary operators.
@@ -107,6 +160,25 @@ pub enum BinaryOp {
     Or,
     Equal,
     NotEqual,
+    Between,
+    NotBetween,
+    Like,
+    NotLike,
+    Is,
+    IsNot,
+    In,
+    NotIn,
+    LShift,
+    RShift,
+    Add,
+    Sub,
+    Mul,
+    Div,
+    Mod,
+    LessThan,
+    LessThanOrEqual,
+    GreaterThan,
+    GreaterThanOrEqual,
 }
 
 impl Expr {
@@ -128,18 +200,50 @@ where
 
 pub(crate) fn write_expr<W: SqlWriter>(w: &mut W, expr: &Expr) {
     match expr {
-        Expr::Column(col) => {
-            write_column_ref(w, col);
-        }
-        Expr::Value(value) => {
-            write_value(w, value.clone());
-        }
-        Expr::Binary(lhs, op, rhs) => write_binary_expr(w, lhs, op, rhs),
+        Expr::Column(col) => write_column_ref(w, col),
+        Expr::Tuple(exprs) => write_tuple(w, exprs),
+        Expr::Value(value) => write_value(w, value.clone()),
+        Expr::Unary(unary, expr) => write_unary_expr(w, unary, expr),
+        Expr::Binary(lhs, op, rhs) => match (op, &**rhs) {
+            (BinaryOp::In, Expr::Tuple(t)) if t.is_empty() => {
+                // 1 = 2 is always false <=> IN () is always false
+                write_binary_expr(w, &Expr::value(1), &BinaryOp::Equal, &Expr::value(2))
+            }
+            (BinaryOp::NotIn, Expr::Tuple(t)) if t.is_empty() => {
+                // 1 = 1 is always true <=> NOT IN () is always true
+                write_binary_expr(w, &Expr::value(1), &BinaryOp::Equal, &Expr::value(1))
+            }
+            _ => write_binary_expr(w, lhs, op, rhs),
+        },
     }
 }
 
+fn write_unary_expr<W: SqlWriter>(w: &mut W, op: &UnaryOp, expr: &Expr) {
+    write_unary_op(w, op);
+    w.push_char(' ');
+
+    let mut paren = true;
+    paren &= !well_known_no_parentheses(expr);
+    paren &= !well_known_high_precedence(expr, &Operator::Unary(*op));
+    if paren {
+        w.push_char('(');
+    }
+    write_expr(w, expr);
+    if paren {
+        w.push_char(')');
+    }
+}
+
+fn write_unary_op<W: SqlWriter>(w: &mut W, op: &UnaryOp) {
+    w.push_str(match op {
+        UnaryOp::Not => "NOT",
+    })
+}
+
 fn write_binary_expr<W: SqlWriter>(w: &mut W, lhs: &Expr, op: &BinaryOp, rhs: &Expr) {
-    let left_paren = !well_known_no_parentheses(lhs);
+    let mut left_paren = true;
+    left_paren &= !well_known_no_parentheses(lhs);
+    left_paren &= !well_known_high_precedence(lhs, &Operator::Binary(*op));
     if left_paren {
         w.push_char('(');
     }
@@ -152,7 +256,9 @@ fn write_binary_expr<W: SqlWriter>(w: &mut W, lhs: &Expr, op: &BinaryOp, rhs: &E
     write_binary_op(w, op);
     w.push_char(' ');
 
-    let right_paren = !well_known_no_parentheses(rhs);
+    let mut right_paren = true;
+    right_paren &= !well_known_no_parentheses(rhs);
+    right_paren &= !well_known_high_precedence(rhs, &Operator::Binary(*op));
     if right_paren {
         w.push_char('(');
     }
@@ -166,9 +272,39 @@ fn write_binary_op<W: SqlWriter>(w: &mut W, op: &BinaryOp) {
     w.push_str(match op {
         BinaryOp::And => "AND",
         BinaryOp::Or => "OR",
+        BinaryOp::Like => "LIKE",
+        BinaryOp::NotLike => "NOT LIKE",
+        BinaryOp::Is => "IS",
+        BinaryOp::IsNot => "IS NOT",
+        BinaryOp::In => "IN",
+        BinaryOp::NotIn => "NOT IN",
+        BinaryOp::Between => "BETWEEN",
+        BinaryOp::NotBetween => "NOT BETWEEN",
         BinaryOp::Equal => "=",
         BinaryOp::NotEqual => "<>",
+        BinaryOp::LessThan => "<",
+        BinaryOp::LessThanOrEqual => "<=",
+        BinaryOp::GreaterThan => ">",
+        BinaryOp::GreaterThanOrEqual => ">=",
+        BinaryOp::Add => "+",
+        BinaryOp::Sub => "-",
+        BinaryOp::Mul => "*",
+        BinaryOp::Div => "/",
+        BinaryOp::Mod => "%",
+        BinaryOp::LShift => "<<",
+        BinaryOp::RShift => ">>",
     })
+}
+
+fn write_tuple<W: SqlWriter>(w: &mut W, exprs: &[Expr]) {
+    w.push_char('(');
+    for (i, expr) in exprs.iter().enumerate() {
+        if i != 0 {
+            w.push_str(", ");
+        }
+        write_expr(w, expr);
+    }
+    w.push_char(')');
 }
 
 fn write_column_ref<W: SqlWriter>(w: &mut W, col: &ColumnRef) {
@@ -191,5 +327,107 @@ fn write_column_ref<W: SqlWriter>(w: &mut W, col: &ColumnRef) {
 }
 
 fn well_known_no_parentheses(expr: &Expr) -> bool {
-    matches!(expr, Expr::Column(_) | Expr::Value(_))
+    matches!(expr, Expr::Column(_) | Expr::Tuple(_) | Expr::Value(_))
+}
+
+fn well_known_high_precedence(expr: &Expr, outer_op: &Operator) -> bool {
+    let inner_op = if let Expr::Binary(_, op, _) = expr {
+        Operator::Binary(*op)
+    } else {
+        return false;
+    };
+
+    if inner_op.is_arithmetic() || inner_op.is_shift() {
+        return outer_op.is_comparison()
+            || outer_op.is_between()
+            || outer_op.is_in()
+            || outer_op.is_like()
+            || outer_op.is_logical();
+    }
+
+    if inner_op.is_comparison() || inner_op.is_in() || inner_op.is_like() || inner_op.is_is() {
+        return outer_op.is_logical();
+    }
+
+    false
+}
+
+enum Operator {
+    Unary(UnaryOp),
+    Binary(BinaryOp),
+}
+
+impl Operator {
+    fn is_logical(&self) -> bool {
+        matches!(
+            self,
+            Operator::Unary(UnaryOp::Not)
+                | Operator::Binary(BinaryOp::And)
+                | Operator::Binary(BinaryOp::Or)
+        )
+    }
+
+    fn is_between(&self) -> bool {
+        matches!(
+            self,
+            Operator::Binary(BinaryOp::Between) | Operator::Binary(BinaryOp::NotBetween)
+        )
+    }
+
+    fn is_like(&self) -> bool {
+        matches!(
+            self,
+            Operator::Binary(BinaryOp::Like) | Operator::Binary(BinaryOp::NotLike)
+        )
+    }
+
+    fn is_in(&self) -> bool {
+        matches!(
+            self,
+            Operator::Binary(BinaryOp::In) | Operator::Binary(BinaryOp::NotIn)
+        )
+    }
+
+    fn is_is(&self) -> bool {
+        matches!(
+            self,
+            Operator::Binary(BinaryOp::Is) | Operator::Binary(BinaryOp::IsNot)
+        )
+    }
+
+    fn is_shift(&self) -> bool {
+        matches!(
+            self,
+            Operator::Binary(BinaryOp::LShift) | Operator::Binary(BinaryOp::RShift)
+        )
+    }
+
+    fn is_arithmetic(&self) -> bool {
+        match self {
+            Operator::Binary(b) => {
+                matches!(
+                    b,
+                    BinaryOp::Mul | BinaryOp::Div | BinaryOp::Mod | BinaryOp::Add | BinaryOp::Sub
+                )
+            }
+            _ => false,
+        }
+    }
+
+    fn is_comparison(&self) -> bool {
+        match self {
+            Operator::Binary(b) => {
+                matches!(
+                    b,
+                    BinaryOp::LessThan
+                        | BinaryOp::LessThanOrEqual
+                        | BinaryOp::Equal
+                        | BinaryOp::GreaterThanOrEqual
+                        | BinaryOp::GreaterThan
+                        | BinaryOp::NotEqual
+                )
+            }
+            _ => false,
+        }
+    }
 }

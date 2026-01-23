@@ -17,6 +17,7 @@ use crate::expr::write_expr;
 use crate::types::Iden;
 use crate::types::IntoColumnRef;
 use crate::types::IntoIden;
+use crate::types::IntoTableRef;
 use crate::types::TableRef;
 use crate::types::write_iden;
 use crate::types::write_table_name;
@@ -35,8 +36,31 @@ pub struct Select {
 
 impl Select {
     /// From table.
-    pub fn from(mut self, table: impl Into<TableRef>) -> Self {
+    pub fn from<R>(mut self, table: R) -> Self
+    where
+        R: IntoTableRef,
+    {
         self.from.push(table.into());
+        self
+    }
+
+    /// From table with alias.
+    pub fn from_as<R, A>(mut self, table: R, alias: A) -> Self
+    where
+        R: IntoTableRef,
+        A: IntoIden,
+    {
+        self.from.push(table.into().alias(alias.into_iden()));
+        self
+    }
+
+    /// From sub-query.
+    pub fn from_subquery<T>(mut self, query: Select, alias: T) -> Self
+    where
+        T: IntoIden,
+    {
+        self.from
+            .push(TableRef::SubQuery(query.into(), alias.into_iden()));
         self
     }
 
@@ -115,7 +139,7 @@ impl Select {
     /// Convert the select statement to a PostgreSQL query string.
     pub fn to_sql(&self) -> String {
         let mut sql = String::new();
-        write_select_statement(&mut sql, self);
+        write_select(&mut sql, self);
         sql
     }
 }
@@ -146,7 +170,7 @@ where
     }
 }
 
-pub(crate) fn write_select_statement<W: SqlWriter>(w: &mut W, select: &Select) {
+pub(crate) fn write_select<W: SqlWriter>(w: &mut W, select: &Select) {
     w.push_str("SELECT ");
 
     for (i, select_expr) in select.selects.iter().enumerate() {
@@ -169,6 +193,13 @@ pub(crate) fn write_select_statement<W: SqlWriter>(w: &mut W, select: &Select) {
                     w.push_str(" AS ");
                     write_iden(w, alias);
                 }
+            }
+            TableRef::SubQuery(query, alias) => {
+                w.push_char('(');
+                write_select(w, query);
+                w.push_char(')');
+                w.push_str(" AS ");
+                write_iden(w, alias);
             }
         }
     }
