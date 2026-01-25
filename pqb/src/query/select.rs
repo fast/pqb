@@ -30,6 +30,8 @@ pub struct Select {
     selects: Vec<SelectExpr>,
     from: Vec<TableRef>,
     conditions: Vec<Expr>,
+    groups: Vec<Expr>,
+    having: Vec<Expr>,
     limit: Option<u64>,
     offset: Option<u64>,
 }
@@ -70,6 +72,18 @@ impl Select {
         T: Into<SelectExpr>,
     {
         self.selects.push(expr.into());
+        self
+    }
+
+    /// Add a function to the select expression list.
+    pub fn func<F>(mut self, func: F) -> Self
+    where
+        F: Into<Expr>,
+    {
+        self.selects.push(SelectExpr {
+            expr: func.into(),
+            alias: None,
+        });
         self
     }
 
@@ -121,6 +135,39 @@ impl Select {
         T: Into<Expr>,
     {
         self.conditions.push(expr.into());
+        self
+    }
+
+    /// GROUP BY columns.
+    pub fn group_by_columns<T, I>(mut self, cols: I) -> Self
+    where
+        T: IntoColumnRef,
+        I: IntoIterator<Item = T>,
+    {
+        for col in cols {
+            self.groups.push(Expr::Column(col.into_column_ref()));
+        }
+        self
+    }
+
+    /// GROUP BY expressions.
+    pub fn group_by_exprs<T, I>(mut self, exprs: I) -> Self
+    where
+        T: Into<Expr>,
+        I: IntoIterator<Item = T>,
+    {
+        for expr in exprs {
+            self.groups.push(expr.into());
+        }
+        self
+    }
+
+    /// HAVING condition.
+    pub fn and_having<T>(mut self, expr: T) -> Self
+    where
+        T: Into<Expr>,
+    {
+        self.having.push(expr.into());
         self
     }
 
@@ -207,6 +254,21 @@ pub(crate) fn write_select<W: SqlWriter>(w: &mut W, select: &Select) {
     if let Some(condition) = Expr::from_conditions(select.conditions.clone()) {
         w.push_str(" WHERE ");
         write_expr(w, &condition);
+    }
+
+    if !select.groups.is_empty() {
+        w.push_str(" GROUP BY ");
+        for (i, group) in select.groups.iter().enumerate() {
+            if i > 0 {
+                w.push_str(", ");
+            }
+            write_expr(w, group);
+        }
+    }
+
+    if let Some(having) = Expr::from_conditions(select.having.clone()) {
+        w.push_str(" HAVING ");
+        write_expr(w, &having);
     }
 
     if let Some(limit) = select.limit {

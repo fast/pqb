@@ -92,3 +92,19 @@ fn select_5() {
         @r#"SELECT "glyph"."image" FROM "glyph" WHERE "glyph"."aspect" IN (3, 4)"#
     );
 }
+
+/// Test GROUP BY and HAVING with aggregate functions.
+/// Ported from sea-query's select_6.
+#[test]
+fn select_6() {
+    assert_snapshot!(
+        Select::new()
+            .column("aspect")
+            .expr(Expr::column("image").max())
+            .from("glyph")
+            .group_by_columns(["aspect"])
+            .and_having(Expr::column("aspect").gt(2))
+            .to_sql(),
+        @r#"SELECT "aspect", MAX("image") FROM "glyph" GROUP BY "aspect" HAVING "aspect" > 2"#
+    );
+}

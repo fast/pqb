@@ -30,6 +30,7 @@
 #![deny(missing_docs)]
 
 pub mod expr;
+pub mod func;
 pub mod query;
 pub mod types;
 pub mod value;

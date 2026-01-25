@@ -17,6 +17,7 @@
 //! [`Expr`] is an arbitrary, dynamically-typed SQL expression. It can be used in select fields,
 //! where clauses and many other places.
 
+use crate::func::Func;
 use crate::types::ColumnName;
 use crate::types::ColumnRef;
 use crate::types::IntoColumnRef;
@@ -32,10 +33,15 @@ use crate::writer::SqlWriter;
 #[expect(missing_docs)] // trivial
 pub enum Expr {
     Column(ColumnRef),
+    Asterisk,
     Tuple(Vec<Expr>),
     Value(Value),
     Unary(UnaryOp, Box<Expr>),
     Binary(Box<Expr>, BinaryOp, Box<Expr>),
+    FunctionCall {
+        func: Func,
+        expr: Box<Expr>,
+    },
 }
 
 /// # Expression constructors
@@ -56,12 +62,95 @@ impl Expr {
         Expr::Column(n.into_column_ref())
     }
 
-    /// Wraps tuple of `Expr`, can be used for tuple comparison
+    /// Express the asterisk (*) without table prefix.
+    pub fn asterisk() -> Self {
+        Expr::Asterisk
+    }
+
+    /// Wraps tuple of `Expr`, can be used for tuple comparison.
     pub fn tuple<I>(n: I) -> Self
     where
         I: IntoIterator<Item = Self>,
     {
         Expr::Tuple(n.into_iter().collect())
+    }
+}
+
+/// # Aggregate functions
+impl Expr {
+    /// Create a MAX() function call.
+    pub fn max(self) -> Self {
+        Expr::FunctionCall {
+            func: Func::Max,
+            expr: Box::new(self),
+        }
+    }
+
+    /// Create a MIN() function call.
+    pub fn min(self) -> Self {
+        Expr::FunctionCall {
+            func: Func::Min,
+            expr: Box::new(self),
+        }
+    }
+
+    /// Create a SUM() function call.
+    pub fn sum(self) -> Self {
+        Expr::FunctionCall {
+            func: Func::Sum,
+            expr: Box::new(self),
+        }
+    }
+
+    /// Create an AVG() function call.
+    pub fn avg(self) -> Self {
+        Expr::FunctionCall {
+            func: Func::Avg,
+            expr: Box::new(self),
+        }
+    }
+
+    /// Create a COUNT() function call.
+    pub fn count(self) -> Self {
+        Expr::FunctionCall {
+            func: Func::Count,
+            expr: Box::new(self),
+        }
+    }
+}
+
+/// # Comparison operations
+impl Expr {
+    /// Greater than (`>`).
+    pub fn gt<R>(self, right: R) -> Self
+    where
+        R: Into<Expr>,
+    {
+        self.binary(BinaryOp::GreaterThan, right)
+    }
+
+    /// Greater than or equal (`>=`).
+    pub fn gte<R>(self, right: R) -> Self
+    where
+        R: Into<Expr>,
+    {
+        self.binary(BinaryOp::GreaterThanOrEqual, right)
+    }
+
+    /// Less than (`<`).
+    pub fn lt<R>(self, right: R) -> Self
+    where
+        R: Into<Expr>,
+    {
+        self.binary(BinaryOp::LessThan, right)
+    }
+
+    /// Less than or equal (`<=`).
+    pub fn lte<R>(self, right: R) -> Self
+    where
+        R: Into<Expr>,
+    {
+        self.binary(BinaryOp::LessThanOrEqual, right)
     }
 }
 
@@ -201,6 +290,7 @@ where
 pub(crate) fn write_expr<W: SqlWriter>(w: &mut W, expr: &Expr) {
     match expr {
         Expr::Column(col) => write_column_ref(w, col),
+        Expr::Asterisk => w.push_char('*'),
         Expr::Tuple(exprs) => write_tuple(w, exprs),
         Expr::Value(value) => write_value(w, value.clone()),
         Expr::Unary(unary, expr) => write_unary_expr(w, unary, expr),
@@ -215,6 +305,9 @@ pub(crate) fn write_expr<W: SqlWriter>(w: &mut W, expr: &Expr) {
             }
             _ => write_binary_expr(w, lhs, op, rhs),
         },
+        Expr::FunctionCall { func, expr } => {
+            crate::func::write_function_call(w, func, expr);
+        }
     }
 }
 
@@ -327,7 +420,7 @@ fn write_column_ref<W: SqlWriter>(w: &mut W, col: &ColumnRef) {
 }
 
 fn well_known_no_parentheses(expr: &Expr) -> bool {
-    matches!(expr, Expr::Column(_) | Expr::Tuple(_) | Expr::Value(_))
+    matches!(expr, Expr::Column(_) | Expr::Tuple(_) | Expr::Value(_) | Expr::Asterisk | Expr::FunctionCall { .. })
 }
 
 fn well_known_high_precedence(expr: &Expr, outer_op: &Operator) -> bool {
