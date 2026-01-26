@@ -22,7 +22,7 @@ use crate::writer::SqlWriter;
 /// SQL built-in functions.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[non_exhaustive]
-#[expect(missing_docs)]
+#[expect(missing_docs)] // trivial
 pub enum Func {
     Max,
     Min,
