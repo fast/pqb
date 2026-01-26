@@ -15,6 +15,7 @@
 use insta::assert_snapshot;
 use pqb::expr::Expr;
 use pqb::query::Select;
+use pqb::types::Order;
 
 #[test]
 fn select_0() {
@@ -167,5 +168,19 @@ fn select_10() {
             )
             .to_sql(),
         @r#"SELECT "character" FROM "character" LEFT JOIN "font" ON "character"."font_id" = "font"."id" AND "character"."font_id" = "font"."id""#
+    );
+}
+
+#[test]
+fn select_11() {
+    assert_snapshot!(
+        Select::new()
+            .column("aspect")
+            .from("glyph")
+            .and_where(Expr::column("aspect").if_null(0).gt(2))
+            .order_by("image", Order::Desc)
+            .order_by(("glyph", "aspect"), Order::Asc)
+            .to_sql(),
+        @r#"SELECT "aspect" FROM "glyph" WHERE COALESCE("aspect", 0) > 2 ORDER BY "image" DESC, "glyph"."aspect" ASC"#
     );
 }

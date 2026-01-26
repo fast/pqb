@@ -19,6 +19,7 @@ use crate::types::IntoColumnRef;
 use crate::types::IntoIden;
 use crate::types::IntoTableRef;
 use crate::types::JoinType;
+use crate::types::Order;
 use crate::types::TableRef;
 use crate::types::write_iden;
 use crate::types::write_table_ref;
@@ -34,6 +35,7 @@ pub struct Select {
     conditions: Vec<Expr>,
     groups: Vec<Expr>,
     having: Vec<Expr>,
+    orders: Vec<OrderExpr>,
     limit: Option<u64>,
     offset: Option<u64>,
 }
@@ -44,6 +46,13 @@ pub struct JoinExpr {
     join_type: JoinType,
     table: TableRef,
     on: Option<Expr>,
+}
+
+/// Order expression.
+#[derive(Debug, Clone, PartialEq)]
+pub struct OrderExpr {
+    expr: Expr,
+    order: Order,
 }
 
 impl Select {
@@ -176,6 +185,18 @@ impl Select {
         self
     }
 
+    /// Order by column.
+    pub fn order_by<C>(mut self, col: C, order: Order) -> Self
+    where
+        C: IntoColumnRef,
+    {
+        self.orders.push(OrderExpr {
+            expr: Expr::Column(col.into_column_ref()),
+            order,
+        });
+        self
+    }
+
     /// GROUP BY columns.
     pub fn group_by_columns<T, I>(mut self, cols: I) -> Self
     where
@@ -304,6 +325,20 @@ pub(crate) fn write_select<W: SqlWriter>(w: &mut W, select: &Select) {
     if let Some(having) = Expr::from_conditions(select.having.clone()) {
         w.push_str(" HAVING ");
         write_expr(w, &having);
+    }
+
+    if !select.orders.is_empty() {
+        w.push_str(" ORDER BY ");
+        for (i, order) in select.orders.iter().enumerate() {
+            if i > 0 {
+                w.push_str(", ");
+            }
+            write_expr(w, &order.expr);
+            match order.order {
+                Order::Asc => w.push_str(" ASC"),
+                Order::Desc => w.push_str(" DESC"),
+            }
+        }
     }
 
     if let Some(limit) = select.limit {
