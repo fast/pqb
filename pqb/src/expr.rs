@@ -17,6 +17,8 @@
 //! [`Expr`] is an arbitrary, dynamically-typed SQL expression. It can be used in select fields,
 //! where clauses and many other places.
 
+use std::borrow::Cow;
+
 use crate::func::FunctionCall;
 use crate::func::write_function_call;
 use crate::query::Select;
@@ -29,7 +31,6 @@ use crate::types::write_table_name;
 use crate::value::Value;
 use crate::value::write_value;
 use crate::writer::SqlWriter;
-use std::borrow::Cow;
 
 /// SQL keywords.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

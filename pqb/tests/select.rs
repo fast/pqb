@@ -472,6 +472,26 @@ fn select_33a() {
 }
 
 #[test]
+fn select_34() {
+    assert_snapshot!(
+        Select::new()
+            .column("aspect")
+            .expr(Expr::column("image").max())
+            .from("glyph")
+            .group_by_columns(["aspect"])
+            .and_having(
+                Expr::column("aspect")
+                    .gt(2)
+                    .or(Expr::column("aspect").lt(8))
+                    .or(Expr::column("aspect").gt(12).and(Expr::column("aspect").lt(18)))
+                    .or(Expr::column("aspect").gt(32)),
+            )
+            .to_sql(),
+        @r#"SELECT "aspect", MAX("image") FROM "glyph" GROUP BY "aspect" HAVING "aspect" > 2 OR "aspect" < 8 OR ("aspect" > 12 AND "aspect" < 18) OR "aspect" > 32"#
+    );
+}
+
+#[test]
 fn select_33b() {
     assert_snapshot!(
         Select::new()
