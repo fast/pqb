@@ -631,3 +631,15 @@ fn select_42() {
         @r#"SELECT "id" FROM "glyph" WHERE "aspect" < 8 AND "aspect" IS NOT NULL"#
     );
 }
+
+#[test]
+fn select_43() {
+    assert_snapshot!(
+        Select::new()
+            .column("id")
+            .from("glyph")
+            .and_where(Expr::custom("TRUE"))
+            .to_sql(),
+        @r#"SELECT "id" FROM "glyph" WHERE TRUE"#
+    );
+}
