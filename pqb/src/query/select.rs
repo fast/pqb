@@ -43,7 +43,7 @@ pub struct Select {
 pub struct JoinExpr {
     join_type: JoinType,
     table: TableRef,
-    on: Expr,
+    on: Option<Expr>,
 }
 
 impl Select {
@@ -157,7 +157,7 @@ impl Select {
         self.joins.push(JoinExpr {
             join_type: JoinType::LeftJoin,
             table: table.into(),
-            on: on.into(),
+            on: Some(on.into()),
         });
         self
     }
@@ -265,8 +265,10 @@ pub(crate) fn write_select<W: SqlWriter>(w: &mut W, select: &Select) {
             JoinType::LeftJoin => w.push_str(" LEFT JOIN "),
         }
         write_table_ref(w, &join.table);
-        w.push_str(" ON ");
-        write_expr(w, &join.on);
+        if let Some(on) = &join.on {
+            w.push_str(" ON ");
+            write_expr(w, on);
+        }
     }
 
     if let Some(condition) = Expr::from_conditions(select.conditions.clone()) {
