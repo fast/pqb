@@ -435,3 +435,14 @@ fn select_30() {
         @r#"SELECT "character", "size_w", "size_h" FROM "character" WHERE ("size_w" * 2) + ("size_h" / 3) = 4"#
     );
 }
+
+#[test]
+fn select_31() {
+    // Build expression dynamically using fold: 0 + 1 + 2 + ... + 9
+    assert_snapshot!(
+        Select::new()
+            .expr((1..10_i32).fold(Expr::value(0), |expr, i| expr.add(i)))
+            .to_sql(),
+        @r#"SELECT 0 + 1 + 2 + 3 + 4 + 5 + 6 + 7 + 8 + 9"#
+    );
+}
