@@ -438,7 +438,6 @@ fn select_30() {
 
 #[test]
 fn select_31() {
-    // Build expression dynamically using fold: 0 + 1 + 2 + ... + 9
     assert_snapshot!(
         Select::new()
             .expr((1..10_i32).fold(Expr::value(0), |expr, i| expr.add(i)))
