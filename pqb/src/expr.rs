@@ -19,6 +19,7 @@
 
 use crate::func::FunctionCall;
 use crate::func::write_function_call;
+use crate::query::Select;
 use crate::query::write_select;
 use crate::types::ColumnName;
 use crate::types::ColumnRef;
@@ -50,7 +51,7 @@ pub enum Expr {
     Unary(UnaryOp, Box<Expr>),
     Binary(Box<Expr>, BinaryOp, Box<Expr>),
     FunctionCall(FunctionCall),
-    SubQuery(Box<crate::query::Select>),
+    SubQuery(Option<SubQueryOp>, Box<Select>),
 }
 
 /// # Expression constructors
@@ -295,8 +296,8 @@ impl Expr {
     }
 
     /// Express a `IN` subquery expression.
-    pub fn in_subquery(self, query: crate::query::Select) -> Expr {
-        self.binary(BinaryOp::In, Expr::SubQuery(Box::new(query)))
+    pub fn in_subquery(self, query: Select) -> Expr {
+        self.binary(BinaryOp::In, Expr::SubQuery(None, Box::new(query)))
     }
 
     /// Apply any unary operator to the expression.
@@ -309,6 +310,17 @@ impl Expr {
     pub fn not(self) -> Expr {
         self.unary(UnaryOp::Not)
     }
+}
+
+/// SubQuery operators
+#[derive(Debug, Copy, Clone, PartialEq)]
+#[non_exhaustive]
+#[expect(missing_docs)]
+pub enum SubQueryOp {
+    Exists,
+    Any,
+    Some,
+    All,
 }
 
 /// Unary operators.
@@ -386,7 +398,15 @@ pub(crate) fn write_expr<W: SqlWriter>(w: &mut W, expr: &Expr) {
             _ => write_binary_expr(w, lhs, op, rhs),
         },
         Expr::FunctionCall(call) => write_function_call(w, call),
-        Expr::SubQuery(query) => {
+        Expr::SubQuery(op, query) => {
+            if let Some(op) = op {
+                w.push_str(match op {
+                    SubQueryOp::Exists => "EXISTS",
+                    SubQueryOp::Any => "ANY",
+                    SubQueryOp::Some => "SOME",
+                    SubQueryOp::All => "ALL",
+                });
+            }
             w.push_char('(');
             write_select(w, query);
             w.push_char(')');
@@ -528,7 +548,7 @@ fn well_known_no_parentheses(expr: &Expr) -> bool {
             | Expr::Asterisk
             | Expr::Keyword(_)
             | Expr::FunctionCall(_)
-            | Expr::SubQuery(_)
+            | Expr::SubQuery(_, _)
     )
 }
 
@@ -566,7 +586,6 @@ fn well_known_high_precedence(expr: &Expr, outer_op: &Operator) -> bool {
     false
 }
 
-#[derive(PartialEq)]
 enum Operator {
     Unary(UnaryOp),
     Binary(BinaryOp),
