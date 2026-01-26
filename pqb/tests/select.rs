@@ -573,3 +573,34 @@ fn select_38() {
     );
     assert!(values.is_empty());
 }
+
+#[test]
+fn select_39() {
+    let (statement, values) = Select::new()
+        .column("id")
+        .from("glyph")
+        .and_where(Expr::column("aspect").is_null().and(Expr::column("aspect").is_not_null()))
+        .to_values()
+        .into_parts();
+    assert_snapshot!(
+        statement,
+        @r#"SELECT "id" FROM "glyph" WHERE "aspect" IS NULL AND "aspect" IS NOT NULL"#
+    );
+    assert!(values.is_empty());
+}
+
+#[test]
+fn select_40() {
+    assert_snapshot!(
+        Select::new()
+            .column("id")
+            .from("glyph")
+            .and_where(
+                Expr::column("aspect")
+                    .is_null()
+                    .or(Expr::column("aspect").is_not_null().and(Expr::column("aspect").lt(8)))
+            )
+            .to_sql(),
+        @r#"SELECT "id" FROM "glyph" WHERE "aspect" IS NULL OR ("aspect" IS NOT NULL AND "aspect" < 8)"#
+    );
+}
