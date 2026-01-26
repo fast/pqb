@@ -153,6 +153,7 @@ impl Expr {
     }
 
     /// Add a value.
+    #[expect(clippy::should_implement_trait)]
     pub fn add<R>(self, rhs: R) -> Self
     where
         R: Into<Expr>,
@@ -161,6 +162,7 @@ impl Expr {
     }
 
     /// Subtract a value.
+    #[expect(clippy::should_implement_trait)]
     pub fn sub<R>(self, rhs: R) -> Self
     where
         R: Into<Expr>,
@@ -169,6 +171,7 @@ impl Expr {
     }
 
     /// Multiply by a value.
+    #[expect(clippy::should_implement_trait)]
     pub fn mul<R>(self, rhs: R) -> Self
     where
         R: Into<Expr>,
@@ -177,6 +180,7 @@ impl Expr {
     }
 
     /// Divide by a value.
+    #[expect(clippy::should_implement_trait)]
     pub fn div<R>(self, rhs: R) -> Self
     where
         R: Into<Expr>,
