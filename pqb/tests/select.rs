@@ -472,6 +472,21 @@ fn select_33a() {
 }
 
 #[test]
+fn select_33b() {
+    assert_snapshot!(
+        Select::new()
+            .column("image")
+            .from("glyph")
+            .and_where(Expr::column("aspect").in_subquery(
+                Select::new().expr(Expr::column("ignore")),
+            ))
+            .to_sql(),
+        @r#"SELECT "image" FROM "glyph" WHERE "aspect" IN (SELECT "ignore")"#
+    );
+}
+
+
+#[test]
 fn select_34() {
     assert_snapshot!(
         Select::new()
@@ -504,15 +519,13 @@ fn select_35() {
 }
 
 #[test]
-fn select_33b() {
+fn select_36() {
     assert_snapshot!(
         Select::new()
-            .column("image")
+            .column("id")
             .from("glyph")
-            .and_where(Expr::column("aspect").in_subquery(
-                Select::new().expr(Expr::column("ignore")),
-            ))
+            .and_where(Expr::column("aspect").is_null())
             .to_sql(),
-        @r#"SELECT "image" FROM "glyph" WHERE "aspect" IN (SELECT "ignore")"#
+        @r#"SELECT "id" FROM "glyph" WHERE "aspect" IS NULL"#
     );
 }
