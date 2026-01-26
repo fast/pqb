@@ -15,6 +15,7 @@
 //! SQL built-in functions.
 
 use crate::expr::Expr;
+use crate::expr::write_expr;
 use crate::types::IntoColumnRef;
 use crate::writer::SqlWriter;
 
@@ -119,10 +120,7 @@ pub(crate) fn write_function_call<W: SqlWriter>(w: &mut W, call: &FunctionCall) 
         Func::Avg => w.push_str("AVG("),
         Func::Count => w.push_str("COUNT("),
     }
-    match call.expr.as_ref() {
-        Expr::Asterisk => w.push_char('*'),
-        _ => crate::expr::write_expr(w, &call.expr),
-    }
+    write_expr(w, &call.expr);
     w.push_char(')');
 }
 
