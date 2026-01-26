@@ -456,3 +456,17 @@ fn select_32() {
         @r#"SELECT "character" AS "C" FROM "character""#
     );
 }
+
+#[test]
+fn select_33() {
+    assert_snapshot!(
+        Select::new()
+            .column("image")
+            .from("glyph")
+            .and_where(Expr::column("aspect").in_subquery(
+                Select::new().expr(Expr::column("ignore")),
+            ))
+            .to_sql(),
+        @r#"SELECT "image" FROM "glyph" WHERE "aspect" IN (SELECT "ignore")"#
+    );
+}
