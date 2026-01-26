@@ -93,8 +93,6 @@ fn select_5() {
     );
 }
 
-/// Test GROUP BY and HAVING with aggregate functions.
-/// Ported from sea-query's select_6.
 #[test]
 fn select_6() {
     assert_snapshot!(
