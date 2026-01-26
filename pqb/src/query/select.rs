@@ -21,28 +21,9 @@ use crate::types::IntoTableRef;
 use crate::types::JoinType;
 use crate::types::TableRef;
 use crate::types::write_iden;
-use crate::types::write_table_name;
+use crate::types::write_table_ref;
 use crate::value::write_value;
 use crate::writer::SqlWriter;
-
-pub(crate) fn write_table_ref<W: SqlWriter>(w: &mut W, table_ref: &TableRef) {
-    match table_ref {
-        TableRef::Table(table_name, alias) => {
-            write_table_name(w, table_name);
-            if let Some(alias) = alias {
-                w.push_str(" AS ");
-                write_iden(w, alias);
-            }
-        }
-        TableRef::SubQuery(query, alias) => {
-            w.push_char('(');
-            write_select(w, query);
-            w.push_char(')');
-            w.push_str(" AS ");
-            write_iden(w, alias);
-        }
-    }
-}
 
 /// Select rows from an existing table.
 #[derive(Default, Debug, Clone, PartialEq)]

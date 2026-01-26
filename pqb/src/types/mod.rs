@@ -17,6 +17,7 @@
 use std::borrow::Cow;
 
 use crate::query::Select;
+use crate::query::write_select;
 use crate::writer::SqlWriter;
 
 mod qualification;
@@ -268,4 +269,23 @@ pub(crate) fn write_schema_name<W: SqlWriter>(w: &mut W, schema_name: &SchemaNam
         w.push_char('.');
     }
     write_iden(w, schema);
+}
+
+pub(crate) fn write_table_ref<W: SqlWriter>(w: &mut W, table_ref: &TableRef) {
+    match table_ref {
+        TableRef::Table(table_name, alias) => {
+            write_table_name(w, table_name);
+            if let Some(alias) = alias {
+                w.push_str(" AS ");
+                write_iden(w, alias);
+            }
+        }
+        TableRef::SubQuery(query, alias) => {
+            w.push_char('(');
+            write_select(w, query);
+            w.push_char(')');
+            w.push_str(" AS ");
+            write_iden(w, alias);
+        }
+    }
 }
