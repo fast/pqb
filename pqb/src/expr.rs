@@ -115,6 +115,11 @@ impl Expr {
         self.binary(BinaryOp::Is, Expr::Keyword(Keyword::Null))
     }
 
+    /// Check if the expression is NOT NULL.
+    pub fn is_not_null(self) -> Self {
+        self.binary(BinaryOp::IsNot, Expr::Keyword(Keyword::Null))
+    }
+
     /// Replace NULL with the specified value using COALESCE.
     pub fn if_null<V>(self, value: V) -> Self
     where

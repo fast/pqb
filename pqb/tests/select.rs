@@ -239,3 +239,16 @@ fn select_15() {
         @r#"SELECT "character" FROM "character" WHERE "font_id" IS NULL"#
     );
 }
+
+#[test]
+fn select_16() {
+    assert_snapshot!(
+        Select::new()
+            .column("character")
+            .from("character")
+            .and_where(Expr::column("font_id").is_null())
+            .and_where(Expr::column("character").is_not_null())
+            .to_sql(),
+        @r#"SELECT "character" FROM "character" WHERE "font_id" IS NULL AND "character" IS NOT NULL"#
+    );
+}
