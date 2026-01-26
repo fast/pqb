@@ -146,10 +146,10 @@ fn select_9() {
             )
             .inner_join(
                 "glyph",
-                Expr::column("character").eq(Expr::column(("glyph", "image"))),
+                Expr::column(("character", "character")).eq(Expr::column(("glyph", "image"))),
             )
             .to_sql(),
-        @r#"SELECT "character" FROM "character" LEFT JOIN "font" ON "character"."font_id" = "font"."id" INNER JOIN "glyph" ON "character" = "glyph"."image""#
+        @r#"SELECT "character" FROM "character" LEFT JOIN "font" ON "character"."font_id" = "font"."id" INNER JOIN "glyph" ON "character"."character" = "glyph"."image""#
     );
 }
 
