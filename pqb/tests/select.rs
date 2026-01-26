@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use insta::assert_snapshot;
+use insta::{assert_compact_debug_snapshot, assert_snapshot};
 use pqb::expr::Expr;
 use pqb::query::Select;
 use pqb::types::Order;
@@ -485,7 +485,6 @@ fn select_33b() {
     );
 }
 
-
 #[test]
 fn select_34() {
     assert_snapshot!(
@@ -535,11 +534,14 @@ fn select_37() {
     let (statement, values) = Select::new()
         .column("id")
         .from("glyph")
-        .and_where(Expr::custom("TRUE").or(Expr::custom("FALSE")))
+        .and_where(Expr::value(true).or(Expr::value(false)))
         .to_values()
         .into_parts();
-    assert_eq!(statement, r#"SELECT "id" FROM "glyph" WHERE (TRUE) OR (FALSE)"#);
-    assert!(values.is_empty());
+    assert_snapshot!(
+        statement,
+        @r#"SELECT "id" FROM "glyph" WHERE $1 OR $2"#
+    );
+    assert_compact_debug_snapshot!(values, @"[Bool(Some(true)), Bool(Some(false))]");
 }
 
 #[test]
@@ -547,17 +549,12 @@ fn select_37a() {
     let (statement, values) = Select::new()
         .column("id")
         .from("glyph")
-        .and_where(
-            Expr::custom("TRUE")
-                .not()
-                .and(Expr::custom("FALSE").not())
-                .not(),
-        )
+        .and_where(Expr::value(true).not().and(Expr::value(false).not()).not())
         .to_values()
         .into_parts();
-    assert_eq!(
+    assert_snapshot!(
         statement,
-        r#"SELECT "id" FROM "glyph" WHERE NOT ((NOT (TRUE)) AND (NOT (FALSE)))"#
+        @r#"SELECT "id" FROM "glyph" WHERE NOT ((NOT $1) AND (NOT $2))"#
     );
-    assert!(values.is_empty());
+    assert_compact_debug_snapshot!(values, @"[Bool(Some(true)), Bool(Some(false))]");
 }
