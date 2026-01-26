@@ -320,14 +320,6 @@ pub(crate) fn write_expr<W: SqlWriter>(w: &mut W, expr: &Expr) {
                 // 1 = 1 is always true <=> NOT IN () is always true
                 write_binary_expr(w, &Expr::value(1), &BinaryOp::Equal, &Expr::value(1))
             }
-            (BinaryOp::Between, Expr::Binary(a, BinaryOp::And, b)) => {
-                // BETWEEN a AND b - no parentheses around a AND b
-                write_expr(w, lhs);
-                w.push_str(" BETWEEN ");
-                write_expr(w, a);
-                w.push_str(" AND ");
-                write_expr(w, b);
-            }
             _ => write_binary_expr(w, lhs, op, rhs),
         },
         Expr::FunctionCall(call) => write_function_call(w, call),
@@ -357,9 +349,11 @@ fn write_unary_op<W: SqlWriter>(w: &mut W, op: &UnaryOp) {
 }
 
 fn write_binary_expr<W: SqlWriter>(w: &mut W, lhs: &Expr, op: &BinaryOp, rhs: &Expr) {
+    let binop = Operator::Binary(*op);
+
     let mut left_paren = true;
     left_paren &= !well_known_no_parentheses(lhs);
-    left_paren &= !well_known_high_precedence(lhs, &Operator::Binary(*op));
+    left_paren &= !well_known_high_precedence(lhs, &binop);
     if left_paren {
         w.push_char('(');
     }
@@ -374,7 +368,14 @@ fn write_binary_expr<W: SqlWriter>(w: &mut W, lhs: &Expr, op: &BinaryOp, rhs: &E
 
     let mut right_paren = true;
     right_paren &= !well_known_no_parentheses(rhs);
-    right_paren &= !well_known_high_precedence(rhs, &Operator::Binary(*op));
+    right_paren &= !well_known_high_precedence(rhs, &binop);
+    // workaround represent trinary op between as nested binary ops
+    if right_paren
+        && binop.is_between()
+        && let Expr::Binary(_, BinaryOp::And, _) = rhs
+    {
+        right_paren = false;
+    }
     if right_paren {
         w.push_char('(');
     }
