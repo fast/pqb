@@ -424,8 +424,6 @@ fn select_28() {
 
 #[test]
 fn select_30() {
-    // Complex arithmetic expression with comparison
-    // Note: pqb generates cleaner SQL without redundant outer parens
     assert_snapshot!(
         Select::new()
             .columns(["character", "size_w", "size_h"])
