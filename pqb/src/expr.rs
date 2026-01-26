@@ -144,6 +144,14 @@ impl Expr {
         )
     }
 
+    /// Pattern matching with LIKE.
+    pub fn like<R>(self, pattern: R) -> Self
+    where
+        R: Into<Expr>,
+    {
+        self.binary(BinaryOp::Like, pattern)
+    }
+
     /// Replace NULL with the specified value using COALESCE.
     pub fn if_null<V>(self, value: V) -> Self
     where

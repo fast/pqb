@@ -289,3 +289,15 @@ fn select_19() {
         @r#"SELECT "character" FROM "character" WHERE "character" = 'A'"#
     );
 }
+
+#[test]
+fn select_20() {
+    assert_snapshot!(
+        Select::new()
+            .column("character")
+            .from("character")
+            .and_where(Expr::column("character").like("A"))
+            .to_sql(),
+        @r#"SELECT "character" FROM "character" WHERE "character" LIKE 'A'"#
+    );
+}
