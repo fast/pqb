@@ -353,6 +353,20 @@ fn select_23() {
 }
 
 #[test]
+fn select_24() {
+    // pqb style: use Rust if/else for conditional building
+    // or just call and_where when condition is true
+    assert_snapshot!(
+        Select::new()
+            .column("character")
+            .from("character")
+            .and_where(Expr::column("font_id").eq(5))
+            .to_sql(),
+        @r#"SELECT "character" FROM "character" WHERE "font_id" = 5"#
+    );
+}
+
+#[test]
 fn select_25() {
     assert_snapshot!(
         Select::new()
