@@ -197,3 +197,19 @@ fn select_12() {
         @r#"SELECT "aspect" FROM "glyph" WHERE COALESCE("aspect", 0) > 2 ORDER BY "id" ASC, "aspect" DESC"#
     );
 }
+
+#[test]
+fn select_13() {
+    assert_snapshot!(
+        Select::new()
+            .column("aspect")
+            .from("glyph")
+            .and_where(Expr::column("aspect").if_null(0).gt(2))
+            .order_by_columns([
+                (("glyph", "id"), Order::Asc),
+                (("glyph", "aspect"), Order::Desc),
+            ])
+            .to_sql(),
+        @r#"SELECT "aspect" FROM "glyph" WHERE COALESCE("aspect", 0) > 2 ORDER BY "glyph"."id" ASC, "glyph"."aspect" DESC"#
+    );
+}
