@@ -28,13 +28,22 @@ use crate::value::Value;
 use crate::value::write_value;
 use crate::writer::SqlWriter;
 
+/// SQL keywords.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
+#[expect(missing_docs)]
+pub enum Keyword {
+    Null,
+}
+
 /// An arbitrary, dynamically-typed SQL expression.
 #[derive(Debug, Clone, PartialEq)]
 #[non_exhaustive]
-#[expect(missing_docs)] // trivial
+#[expect(missing_docs)]
 pub enum Expr {
     Column(ColumnRef),
     Asterisk,
+    Keyword(Keyword),
     Tuple(Vec<Expr>),
     Value(Value),
     Unary(UnaryOp, Box<Expr>),
@@ -99,6 +108,11 @@ impl Expr {
     /// Create a COUNT() function call.
     pub fn count(self) -> Self {
         Expr::FunctionCall(FunctionCall::count(self))
+    }
+
+    /// Check if the expression is NULL.
+    pub fn is_null(self) -> Self {
+        self.binary(BinaryOp::Is, Expr::Keyword(Keyword::Null))
     }
 
     /// Replace NULL with the specified value using COALESCE.
@@ -220,7 +234,7 @@ impl Expr {
 /// Unary operators.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[non_exhaustive]
-#[expect(missing_docs)] // trivial
+#[expect(missing_docs)]
 pub enum UnaryOp {
     Not,
 }
@@ -228,7 +242,7 @@ pub enum UnaryOp {
 /// Binary operators.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[non_exhaustive]
-#[expect(missing_docs)] // trivial
+#[expect(missing_docs)]
 pub enum BinaryOp {
     And,
     Or,
@@ -276,6 +290,7 @@ pub(crate) fn write_expr<W: SqlWriter>(w: &mut W, expr: &Expr) {
     match expr {
         Expr::Column(col) => write_column_ref(w, col),
         Expr::Asterisk => w.push_char('*'),
+        Expr::Keyword(Keyword::Null) => w.push_str("NULL"),
         Expr::Tuple(exprs) => write_tuple(w, exprs),
         Expr::Value(value) => write_value(w, value.clone()),
         Expr::Unary(unary, expr) => write_unary_expr(w, unary, expr),
@@ -405,7 +420,12 @@ fn write_column_ref<W: SqlWriter>(w: &mut W, col: &ColumnRef) {
 fn well_known_no_parentheses(expr: &Expr) -> bool {
     matches!(
         expr,
-        Expr::Column(_) | Expr::Tuple(_) | Expr::Value(_) | Expr::Asterisk | Expr::FunctionCall(_)
+        Expr::Column(_)
+            | Expr::Tuple(_)
+            | Expr::Value(_)
+            | Expr::Asterisk
+            | Expr::Keyword(_)
+            | Expr::FunctionCall(_)
     )
 }
 

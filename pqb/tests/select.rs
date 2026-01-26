@@ -227,3 +227,15 @@ fn select_14() {
         @r#"SELECT "id", "aspect", MAX("image") FROM "glyph" GROUP BY "glyph"."id", "glyph"."aspect" HAVING "aspect" > 2"#
     );
 }
+
+#[test]
+fn select_15() {
+    assert_snapshot!(
+        Select::new()
+            .column("character")
+            .from("character")
+            .and_where(Expr::column("font_id").is_null())
+            .to_sql(),
+        @r#"SELECT "character" FROM "character" WHERE "font_id" IS NULL"#
+    );
+}
