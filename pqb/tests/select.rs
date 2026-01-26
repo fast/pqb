@@ -705,17 +705,6 @@ fn select_48() {
 }
 
 #[test]
-fn select_49() {
-    assert_snapshot!(
-        Select::new()
-            .expr(Expr::asterisk())
-            .from("character")
-            .to_sql(),
-        @r#"SELECT * FROM "character""#
-    );
-}
-
-#[test]
 fn select_48a() {
     assert_snapshot!(
         Select::new()
@@ -724,5 +713,16 @@ fn select_48a() {
             .and_where(Expr::tuple([Expr::column("aspect"), Expr::value("100")]).in_tuples([[Expr::value(8), Expr::value("100")]]))
             .to_sql(),
         @r#"SELECT "id" FROM "glyph" WHERE ("aspect", '100') IN ((8, '100'))"#
+    );
+}
+
+#[test]
+fn select_49() {
+    assert_snapshot!(
+        Select::new()
+            .expr(Expr::asterisk())
+            .from("character")
+            .to_sql(),
+        @r#"SELECT * FROM "character""#
     );
 }
