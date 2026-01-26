@@ -538,6 +538,26 @@ fn select_37() {
         .and_where(Expr::custom("TRUE").or(Expr::custom("FALSE")))
         .to_values()
         .into_parts();
-    assert_eq!(statement, r#"SELECT "id" FROM "glyph" WHERE (TRUE) OR (FALSE)"#);
+    assert_eq!(statement, r#"SELECT "id" FROM "glyph" WHERE TRUE OR FALSE"#);
+    assert!(values.is_empty());
+}
+
+#[test]
+fn select_37a() {
+    let (statement, values) = Select::new()
+        .column("id")
+        .from("glyph")
+        .and_where(
+            Expr::custom("TRUE")
+                .not()
+                .and(Expr::custom("FALSE").not())
+                .not(),
+        )
+        .to_values()
+        .into_parts();
+    assert_eq!(
+        statement,
+        r#"SELECT "id" FROM "glyph" WHERE NOT ((NOT TRUE) AND (NOT FALSE))"#
+    );
     assert!(values.is_empty());
 }
