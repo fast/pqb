@@ -127,7 +127,7 @@ fn select_8() {
             .from("character")
             .left_join(
                 "font",
-                Expr::column(("character", "font_id")).equals(("font", "id")),
+                Expr::column(("character", "font_id")).eq(Expr::column(("font", "id"))),
             )
             .to_sql(),
         @r#"SELECT "character" FROM "character" LEFT JOIN "font" ON "character"."font_id" = "font"."id""#
