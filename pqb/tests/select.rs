@@ -133,3 +133,22 @@ fn select_8() {
         @r#"SELECT "character" FROM "character" LEFT JOIN "font" ON "character"."font_id" = "font"."id""#
     );
 }
+
+#[test]
+fn select_9() {
+    assert_snapshot!(
+        Select::new()
+            .column("character")
+            .from("character")
+            .left_join(
+                "font",
+                Expr::column(("character", "font_id")).eq(Expr::column(("font", "id"))),
+            )
+            .inner_join(
+                "glyph",
+                Expr::column("character").eq(Expr::column(("glyph", "image"))),
+            )
+            .to_sql(),
+        @r#"SELECT "character" FROM "character" LEFT JOIN "font" ON "character"."font_id" = "font"."id" INNER JOIN "glyph" ON "character" = "glyph"."image""#
+    );
+}

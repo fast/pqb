@@ -162,6 +162,20 @@ impl Select {
         self
     }
 
+    /// Inner join with another table.
+    pub fn inner_join<T, E>(mut self, table: T, on: E) -> Self
+    where
+        T: IntoTableRef,
+        E: Into<Expr>,
+    {
+        self.joins.push(JoinExpr {
+            join_type: JoinType::InnerJoin,
+            table: table.into(),
+            on: Some(on.into()),
+        });
+        self
+    }
+
     /// GROUP BY columns.
     pub fn group_by_columns<T, I>(mut self, cols: I) -> Self
     where
@@ -263,6 +277,7 @@ pub(crate) fn write_select<W: SqlWriter>(w: &mut W, select: &Select) {
     for join in &select.joins {
         match join.join_type {
             JoinType::LeftJoin => w.push_str(" LEFT JOIN "),
+            JoinType::InnerJoin => w.push_str(" INNER JOIN "),
         }
         write_table_ref(w, &join.table);
         if let Some(on) = &join.on {
