@@ -37,8 +37,8 @@ pub enum Func {
 /// A function call expression.
 #[derive(Debug, Clone, PartialEq)]
 pub struct FunctionCall {
-    pub(crate) func: Func,
-    pub(crate) expr: Box<Expr>,
+    func: Func,
+    args: Vec<Expr>,
 }
 
 impl FunctionCall {
@@ -49,7 +49,7 @@ impl FunctionCall {
     {
         Self {
             func: Func::Max,
-            expr: Box::new(expr.into()),
+            args: vec![expr.into()],
         }
     }
 
@@ -60,7 +60,7 @@ impl FunctionCall {
     {
         Self {
             func: Func::Min,
-            expr: Box::new(expr.into()),
+            args: vec![expr.into()],
         }
     }
 
@@ -71,7 +71,7 @@ impl FunctionCall {
     {
         Self {
             func: Func::Sum,
-            expr: Box::new(expr.into()),
+            args: vec![expr.into()],
         }
     }
 
@@ -82,7 +82,7 @@ impl FunctionCall {
     {
         Self {
             func: Func::Avg,
-            expr: Box::new(expr.into()),
+            args: vec![expr.into()],
         }
     }
 
@@ -93,7 +93,7 @@ impl FunctionCall {
     {
         Self {
             func: Func::Count,
-            expr: Box::new(expr.into()),
+            args: vec![expr.into()],
         }
     }
 
@@ -101,7 +101,7 @@ impl FunctionCall {
     pub fn count_all() -> Self {
         Self {
             func: Func::Count,
-            expr: Box::new(Expr::Asterisk),
+            args: vec![Expr::Asterisk],
         }
     }
 }
@@ -121,7 +121,12 @@ pub(crate) fn write_function_call<W: SqlWriter>(w: &mut W, call: &FunctionCall) 
         Func::Count => w.push_str("COUNT"),
     }
     w.push_char('(');
-    write_expr(w, &call.expr);
+    for (i, arg) in call.args.iter().enumerate() {
+        if i > 0 {
+            w.push_str(", ");
+        }
+        write_expr(w, arg);
+    }
     w.push_char(')');
 }
 
