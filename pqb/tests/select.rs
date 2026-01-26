@@ -320,6 +320,27 @@ fn select_21() {
 }
 
 #[test]
+fn select_22() {
+    assert_snapshot!(
+        Select::new()
+            .column("character")
+            .from("character")
+            .and_where(
+                Expr::column("character")
+                    .like("C")
+                    .or(Expr::column("character").like("D").and(Expr::column("character").like("E"))),
+            )
+            .and_where(
+                Expr::column("character")
+                    .like("F")
+                    .or(Expr::column("character").like("G")),
+            )
+            .to_sql(),
+        @r#"SELECT "character" FROM "character" WHERE ("character" LIKE 'C' OR ("character" LIKE 'D' AND "character" LIKE 'E')) AND ("character" LIKE 'F' OR "character" LIKE 'G')"#
+    );
+}
+
+#[test]
 fn select_25() {
     assert_snapshot!(
         Select::new()
