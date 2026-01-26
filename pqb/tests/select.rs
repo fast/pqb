@@ -12,7 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use insta::{assert_compact_debug_snapshot, assert_snapshot};
+use insta::assert_compact_debug_snapshot;
+use insta::assert_snapshot;
 use pqb::expr::Expr;
 use pqb::query::Select;
 use pqb::types::Order;
@@ -564,7 +565,11 @@ fn select_38() {
     let (statement, values) = Select::new()
         .column("id")
         .from("glyph")
-        .and_where(Expr::column("aspect").is_null().or(Expr::column("aspect").is_not_null()))
+        .and_where(
+            Expr::column("aspect")
+                .is_null()
+                .or(Expr::column("aspect").is_not_null()),
+        )
         .to_values()
         .into_parts();
     assert_snapshot!(
@@ -579,7 +584,11 @@ fn select_39() {
     let (statement, values) = Select::new()
         .column("id")
         .from("glyph")
-        .and_where(Expr::column("aspect").is_null().and(Expr::column("aspect").is_not_null()))
+        .and_where(
+            Expr::column("aspect")
+                .is_null()
+                .and(Expr::column("aspect").is_not_null()),
+        )
         .to_values()
         .into_parts();
     assert_snapshot!(

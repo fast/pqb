@@ -24,7 +24,8 @@ use crate::types::TableRef;
 use crate::types::write_iden;
 use crate::types::write_table_ref;
 use crate::value::write_value;
-use crate::writer::{SqlWriter, SqlWriterValues};
+use crate::writer::SqlWriter;
+use crate::writer::SqlWriterValues;
 
 /// Select rows from an existing table.
 #[derive(Default, Debug, Clone, PartialEq)]
