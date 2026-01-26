@@ -252,3 +252,15 @@ fn select_16() {
         @r#"SELECT "character" FROM "character" WHERE "font_id" IS NULL AND "character" IS NOT NULL"#
     );
 }
+
+#[test]
+fn select_17() {
+    assert_snapshot!(
+        Select::new()
+            .column(("glyph", "image"))
+            .from("glyph")
+            .and_where(Expr::column(("glyph", "aspect")).between(3, 5))
+            .to_sql(),
+        @r#"SELECT "glyph"."image" FROM "glyph" WHERE "glyph"."aspect" BETWEEN 3 AND 5"#
+    );
+}

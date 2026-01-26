@@ -120,6 +120,18 @@ impl Expr {
         self.binary(BinaryOp::IsNot, Expr::Keyword(Keyword::Null))
     }
 
+    /// Check if the expression is between two values.
+    pub fn between<A, B>(self, a: A, b: B) -> Self
+    where
+        A: Into<Expr>,
+        B: Into<Expr>,
+    {
+        self.binary(
+            BinaryOp::Between,
+            Expr::Binary(Box::new(a.into()), BinaryOp::And, Box::new(b.into())),
+        )
+    }
+
     /// Replace NULL with the specified value using COALESCE.
     pub fn if_null<V>(self, value: V) -> Self
     where
@@ -307,6 +319,14 @@ pub(crate) fn write_expr<W: SqlWriter>(w: &mut W, expr: &Expr) {
             (BinaryOp::NotIn, Expr::Tuple(t)) if t.is_empty() => {
                 // 1 = 1 is always true <=> NOT IN () is always true
                 write_binary_expr(w, &Expr::value(1), &BinaryOp::Equal, &Expr::value(1))
+            }
+            (BinaryOp::Between, Expr::Binary(a, BinaryOp::And, b)) => {
+                // BETWEEN a AND b - no parentheses around a AND b
+                write_expr(w, lhs);
+                w.push_str(" BETWEEN ");
+                write_expr(w, a);
+                w.push_str(" AND ");
+                write_expr(w, b);
             }
             _ => write_binary_expr(w, lhs, op, rhs),
         },
