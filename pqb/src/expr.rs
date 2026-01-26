@@ -498,6 +498,11 @@ fn well_known_high_precedence(expr: &Expr, outer_op: &Operator) -> bool {
         return false;
     };
 
+    // Same operator precedence - no parentheses needed (left-associative)
+    if inner_op == *outer_op {
+        return true;
+    }
+
     if inner_op.is_arithmetic() || inner_op.is_shift() {
         return outer_op.is_comparison()
             || outer_op.is_between()
@@ -513,6 +518,7 @@ fn well_known_high_precedence(expr: &Expr, outer_op: &Operator) -> bool {
     false
 }
 
+#[derive(Debug, PartialEq)]
 enum Operator {
     Unary(UnaryOp),
     Binary(BinaryOp),

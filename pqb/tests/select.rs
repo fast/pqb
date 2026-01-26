@@ -303,6 +303,23 @@ fn select_20() {
 }
 
 #[test]
+fn select_21() {
+    assert_snapshot!(
+        Select::new()
+            .column("character")
+            .from("character")
+            .and_where(
+                Expr::column("character")
+                    .like("A%")
+                    .or(Expr::column("character").like("%B"))
+                    .or(Expr::column("character").like("%C%")),
+            )
+            .to_sql(),
+        @r#"SELECT "character" FROM "character" WHERE "character" LIKE 'A%' OR "character" LIKE '%B' OR "character" LIKE '%C%'"#
+    );
+}
+
+#[test]
 fn select_25() {
     assert_snapshot!(
         Select::new()
