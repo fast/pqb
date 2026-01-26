@@ -277,3 +277,15 @@ fn select_18() {
         @r#"SELECT "aspect" FROM "glyph" WHERE ("aspect" BETWEEN 3 AND 5) AND ("aspect" NOT BETWEEN 8 AND 10)"#
     );
 }
+
+#[test]
+fn select_19() {
+    assert_snapshot!(
+        Select::new()
+            .column("character")
+            .from("character")
+            .and_where(Expr::column("character").eq("A"))
+            .to_sql(),
+        @r#"SELECT "character" FROM "character" WHERE "character" = 'A'"#
+    );
+}
