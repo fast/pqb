@@ -52,7 +52,6 @@ pub enum Expr {
     Binary(Box<Expr>, BinaryOp, Box<Expr>),
     FunctionCall(FunctionCall),
     SubQuery(Option<SubQueryOp>, Box<Select>),
-    /// Custom SQL expression.
     Custom(String),
 }
 
