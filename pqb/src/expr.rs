@@ -29,6 +29,7 @@ use crate::types::write_table_name;
 use crate::value::Value;
 use crate::value::write_value;
 use crate::writer::SqlWriter;
+use std::borrow::Cow;
 
 /// SQL keywords.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -52,7 +53,7 @@ pub enum Expr {
     Binary(Box<Expr>, BinaryOp, Box<Expr>),
     FunctionCall(FunctionCall),
     SubQuery(Option<SubQueryOp>, Box<Select>),
-    Custom(String),
+    Custom(Cow<'static, str>),
 }
 
 /// # Expression constructors
@@ -87,11 +88,11 @@ impl Expr {
     }
 
     /// Express a custom SQL expression.
-    pub fn custom<S>(sql: S) -> Self
+    pub fn custom<T>(expr: T) -> Self
     where
-        S: Into<String>,
+        T: Into<Cow<'static, str>>,
     {
-        Expr::Custom(sql.into())
+        Expr::Custom(expr.into())
     }
 }
 
@@ -420,7 +421,7 @@ pub(crate) fn write_expr<W: SqlWriter>(w: &mut W, expr: &Expr) {
             write_select(w, query);
             w.push_char(')');
         }
-        Expr::Custom(sql) => w.push_str(sql),
+        Expr::Custom(expr) => w.push_str(expr),
     }
 }
 
