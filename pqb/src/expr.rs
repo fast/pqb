@@ -390,6 +390,14 @@ fn write_binary_expr<W: SqlWriter>(w: &mut W, lhs: &Expr, op: &BinaryOp, rhs: &E
     let mut left_paren = true;
     left_paren &= !well_known_no_parentheses(lhs);
     left_paren &= !well_known_high_precedence(lhs, &binop);
+    // left associativity allow us to drop the left parentheses
+    if left_paren
+        && let Expr::Binary(_, inner_op, _) = lhs
+        && inner_op == op
+        && well_known_left_associative(op)
+    {
+        left_paren = false;
+    }
     if left_paren {
         w.push_char('(');
     }
@@ -491,13 +499,15 @@ fn well_known_no_parentheses(expr: &Expr) -> bool {
     )
 }
 
-/// Check if the operator is left-associative.
-/// For left-associative operators, nested same operators don't need parentheses.
-/// e.g., `a OR b OR c` instead of `(a OR b) OR c`
-fn is_left_associative(op: &BinaryOp) -> bool {
+fn well_known_left_associative(op: &BinaryOp) -> bool {
     matches!(
         op,
-        BinaryOp::And | BinaryOp::Or | BinaryOp::Add | BinaryOp::Sub | BinaryOp::Mul | BinaryOp::Div
+        BinaryOp::And
+            | BinaryOp::Or
+            | BinaryOp::Add
+            | BinaryOp::Sub
+            | BinaryOp::Mul
+            | BinaryOp::Div
     )
 }
 
@@ -507,11 +517,6 @@ fn well_known_high_precedence(expr: &Expr, outer_op: &Operator) -> bool {
     } else {
         return false;
     };
-
-    // Left-associative: same operator, no parentheses needed
-    if inner_op == *outer_op {
-        return matches!(outer_op, Operator::Binary(op) if is_left_associative(op));
-    }
 
     if inner_op.is_arithmetic() || inner_op.is_shift() {
         return outer_op.is_comparison()
