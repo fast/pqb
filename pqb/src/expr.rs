@@ -527,6 +527,122 @@ fn well_known_left_associative(op: &BinaryOp) -> bool {
     )
 }
 
+/// Arithmetic operation: `+`
+impl std::ops::Add for Expr {
+    type Output = Self;
+
+    fn add(self, rhs: Self) -> Self::Output {
+        Expr::Binary(Box::new(self), BinaryOp::Add, Box::new(rhs))
+    }
+}
+
+impl std::ops::Add<i32> for Expr {
+    type Output = Self;
+
+    fn add(self, rhs: i32) -> Self::Output {
+        Expr::Binary(Box::new(self), BinaryOp::Add, Box::new(Expr::value(rhs)))
+    }
+}
+
+impl std::ops::Add<i64> for Expr {
+    type Output = Self;
+
+    fn add(self, rhs: i64) -> Self::Output {
+        Expr::Binary(Box::new(self), BinaryOp::Add, Box::new(Expr::value(rhs)))
+    }
+}
+
+impl std::ops::Add<&str> for Expr {
+    type Output = Self;
+
+    fn add(self, rhs: &str) -> Self::Output {
+        Expr::Binary(Box::new(self), BinaryOp::Add, Box::new(Expr::value(rhs)))
+    }
+}
+
+impl std::ops::Add<String> for Expr {
+    type Output = Self;
+
+    fn add(self, rhs: String) -> Self::Output {
+        Expr::Binary(Box::new(self), BinaryOp::Add, Box::new(Expr::value(rhs)))
+    }
+}
+
+/// Arithmetic operation: `-`
+impl std::ops::Sub for Expr {
+    type Output = Self;
+
+    fn sub(self, rhs: Self) -> Self::Output {
+        Expr::Binary(Box::new(self), BinaryOp::Sub, Box::new(rhs))
+    }
+}
+
+impl std::ops::Sub<i32> for Expr {
+    type Output = Self;
+
+    fn sub(self, rhs: i32) -> Self::Output {
+        Expr::Binary(Box::new(self), BinaryOp::Sub, Box::new(Expr::value(rhs)))
+    }
+}
+
+impl std::ops::Sub<i64> for Expr {
+    type Output = Self;
+
+    fn sub(self, rhs: i64) -> Self::Output {
+        Expr::Binary(Box::new(self), BinaryOp::Sub, Box::new(Expr::value(rhs)))
+    }
+}
+
+/// Arithmetic operation: `*`
+impl std::ops::Mul for Expr {
+    type Output = Self;
+
+    fn mul(self, rhs: Self) -> Self::Output {
+        Expr::Binary(Box::new(self), BinaryOp::Mul, Box::new(rhs))
+    }
+}
+
+impl std::ops::Mul<i32> for Expr {
+    type Output = Self;
+
+    fn mul(self, rhs: i32) -> Self::Output {
+        Expr::Binary(Box::new(self), BinaryOp::Mul, Box::new(Expr::value(rhs)))
+    }
+}
+
+impl std::ops::Mul<i64> for Expr {
+    type Output = Self;
+
+    fn mul(self, rhs: i64) -> Self::Output {
+        Expr::Binary(Box::new(self), BinaryOp::Mul, Box::new(Expr::value(rhs)))
+    }
+}
+
+/// Arithmetic operation: `/`
+impl std::ops::Div for Expr {
+    type Output = Self;
+
+    fn div(self, rhs: Self) -> Self::Output {
+        Expr::Binary(Box::new(self), BinaryOp::Div, Box::new(rhs))
+    }
+}
+
+impl std::ops::Div<i32> for Expr {
+    type Output = Self;
+
+    fn div(self, rhs: i32) -> Self::Output {
+        Expr::Binary(Box::new(self), BinaryOp::Div, Box::new(Expr::value(rhs)))
+    }
+}
+
+impl std::ops::Div<i64> for Expr {
+    type Output = Self;
+
+    fn div(self, rhs: i64) -> Self::Output {
+        Expr::Binary(Box::new(self), BinaryOp::Div, Box::new(Expr::value(rhs)))
+    }
+}
+
 fn well_known_high_precedence(expr: &Expr, outer_op: &Operator) -> bool {
     let inner_op = if let Expr::Binary(_, op, _) = expr {
         Operator::Binary(*op)

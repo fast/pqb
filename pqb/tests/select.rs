@@ -403,3 +403,50 @@ fn select_27() {
         @r#"SELECT "character", "size_w", "size_h" FROM "character" WHERE "size_w" = 3 AND "size_h" = 4 AND "size_h" = 5"#
     );
 }
+
+#[test]
+fn select_28() {
+    // pqb style: use .or() chaining instead of any! macro
+    assert_snapshot!(
+        Select::new()
+            .columns(["character", "size_w", "size_h"])
+            .from("character")
+            .and_where(
+                Expr::column("size_w")
+                    .eq(3)
+                    .or(Expr::column("size_h").eq(4))
+                    .or(Expr::column("size_h").eq(5)),
+            )
+            .to_sql(),
+        @r#"SELECT "character", "size_w", "size_h" FROM "character" WHERE "size_w" = 3 OR "size_h" = 4 OR "size_h" = 5"#
+    );
+}
+
+// select_29 is like select_30 but with expression outside
+// Note: Outer parens not needed when expression at top-level in SELECT
+#[test]
+fn select_29() {
+    assert_snapshot!(
+        Select::new()
+            .expr((Expr::column("aspect").mul(2) + Expr::column("aspect").div(3)).eq(4))
+            .from("glyph")
+            .to_sql(),
+        @r#"SELECT ("aspect" * 2) + ("aspect" / 3) = 4 FROM "glyph""#
+    );
+}
+
+#[test]
+fn select_30() {
+    // Complex arithmetic expression with comparison
+    // Note: pqb generates cleaner SQL without redundant outer parens
+    assert_snapshot!(
+        Select::new()
+            .columns(["character", "size_w", "size_h"])
+            .from("character")
+            .and_where(
+                (Expr::column("size_w").mul(2) + Expr::column("size_h").div(3)).eq(4)
+            )
+            .to_sql(),
+        @r#"SELECT "character", "size_w", "size_h" FROM "character" WHERE ("size_w" * 2) + ("size_h" / 3) = 4"#
+    );
+}
