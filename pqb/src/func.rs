@@ -114,12 +114,13 @@ impl From<FunctionCall> for Expr {
 
 pub(crate) fn write_function_call<W: SqlWriter>(w: &mut W, call: &FunctionCall) {
     match call.func {
-        Func::Max => w.push_str("MAX("),
-        Func::Min => w.push_str("MIN("),
-        Func::Sum => w.push_str("SUM("),
-        Func::Avg => w.push_str("AVG("),
-        Func::Count => w.push_str("COUNT("),
+        Func::Max => w.push_str("MAX"),
+        Func::Min => w.push_str("MIN"),
+        Func::Sum => w.push_str("SUM"),
+        Func::Avg => w.push_str("AVG"),
+        Func::Count => w.push_str("COUNT"),
     }
+    w.push_char('(');
     write_expr(w, &call.expr);
     w.push_char(')');
 }
