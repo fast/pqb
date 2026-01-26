@@ -529,3 +529,15 @@ fn select_36() {
         @r#"SELECT "id" FROM "glyph" WHERE "aspect" IS NULL"#
     );
 }
+
+#[test]
+fn select_37() {
+    assert_snapshot!(
+        Select::new()
+            .column("id")
+            .from("glyph")
+            .and_where(Expr::custom("TRUE").or(Expr::custom("FALSE")))
+            .to_sql(),
+        @r#"SELECT "id" FROM "glyph" WHERE (TRUE) OR (FALSE)"#
+    );
+}
