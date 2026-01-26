@@ -714,3 +714,15 @@ fn select_49() {
         @r#"SELECT * FROM "character""#
     );
 }
+
+#[test]
+fn select_48a() {
+    assert_snapshot!(
+        Select::new()
+            .column("id")
+            .from("glyph")
+            .and_where(Expr::tuple([Expr::column("aspect"), Expr::value("100")]).in_tuples([[Expr::value(8), Expr::value("100")]]))
+            .to_sql(),
+        @r#"SELECT "id" FROM "glyph" WHERE ("aspect", '100') IN ((8, '100'))"#
+    );
+}

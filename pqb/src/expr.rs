@@ -311,6 +311,23 @@ impl Expr {
         self.binary(BinaryOp::In, Expr::SubQuery(None, Box::new(query)))
     }
 
+    /// Express a `IN` expression with tuple values.
+    pub fn in_tuples<T, I>(self, tuples: I) -> Expr
+    where
+        T: IntoIterator<Item = Expr>,
+        I: IntoIterator<Item = T>,
+    {
+        self.binary(
+            BinaryOp::In,
+            Expr::Tuple(
+                tuples
+                    .into_iter()
+                    .map(|t| Expr::Tuple(t.into_iter().collect()))
+                    .collect(),
+            ),
+        )
+    }
+
     /// Apply any unary operator to the expression.
     pub fn unary(self, op: UnaryOp) -> Expr {
         Expr::Unary(op, Box::new(self))
