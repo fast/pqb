@@ -558,3 +558,18 @@ fn select_37a() {
     );
     assert_compact_debug_snapshot!(values, @"[Bool(Some(true)), Bool(Some(false))]");
 }
+
+#[test]
+fn select_38() {
+    let (statement, values) = Select::new()
+        .column("id")
+        .from("glyph")
+        .and_where(Expr::column("aspect").is_null().or(Expr::column("aspect").is_not_null()))
+        .to_values()
+        .into_parts();
+    assert_snapshot!(
+        statement,
+        @r#"SELECT "id" FROM "glyph" WHERE "aspect" IS NULL OR "aspect" IS NOT NULL"#
+    );
+    assert!(values.is_empty());
+}
