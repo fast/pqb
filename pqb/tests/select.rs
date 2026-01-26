@@ -492,6 +492,18 @@ fn select_34() {
 }
 
 #[test]
+fn select_35() {
+    assert_snapshot!(
+        Select::new()
+            .column("id")
+            .from("glyph")
+            .and_where(Expr::column("aspect").is_null())
+            .to_sql(),
+        @r#"SELECT "id" FROM "glyph" WHERE "aspect" IS NULL"#
+    );
+}
+
+#[test]
 fn select_33b() {
     assert_snapshot!(
         Select::new()
