@@ -2,5 +2,5 @@
 
 # temporary files
 .DS_Store
-__pycache__
 AGENTS.md
+*.pending-snap

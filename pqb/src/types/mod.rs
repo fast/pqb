@@ -231,6 +231,16 @@ pub struct ColumnName(pub Option<TableName>, pub Iden);
 #[expect(missing_docs)]
 pub enum JoinType {
     LeftJoin,
+    InnerJoin,
+}
+
+/// Sort order.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
+#[expect(missing_docs)]
+pub enum Order {
+    Asc,
+    Desc,
 }
 
 pub(crate) fn write_iden<W: SqlWriter>(w: &mut W, iden: &Iden) {

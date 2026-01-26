@@ -19,6 +19,7 @@
 
 use crate::func::FunctionCall;
 use crate::func::write_function_call;
+use crate::query::write_select;
 use crate::types::ColumnName;
 use crate::types::ColumnRef;
 use crate::types::IntoColumnRef;
@@ -28,18 +29,28 @@ use crate::value::Value;
 use crate::value::write_value;
 use crate::writer::SqlWriter;
 
+/// SQL keywords.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
+#[expect(missing_docs)]
+pub enum Keyword {
+    Null,
+}
+
 /// An arbitrary, dynamically-typed SQL expression.
 #[derive(Debug, Clone, PartialEq)]
 #[non_exhaustive]
-#[expect(missing_docs)] // trivial
+#[expect(missing_docs)]
 pub enum Expr {
     Column(ColumnRef),
     Asterisk,
+    Keyword(Keyword),
     Tuple(Vec<Expr>),
     Value(Value),
     Unary(UnaryOp, Box<Expr>),
     Binary(Box<Expr>, BinaryOp, Box<Expr>),
     FunctionCall(FunctionCall),
+    SubQuery(Box<crate::query::Select>),
 }
 
 /// # Expression constructors
@@ -99,6 +110,84 @@ impl Expr {
     /// Create a COUNT() function call.
     pub fn count(self) -> Self {
         Expr::FunctionCall(FunctionCall::count(self))
+    }
+
+    /// Check if the expression is NULL.
+    pub fn is_null(self) -> Self {
+        self.binary(BinaryOp::Is, Expr::Keyword(Keyword::Null))
+    }
+
+    /// Check if the expression is NOT NULL.
+    pub fn is_not_null(self) -> Self {
+        self.binary(BinaryOp::IsNot, Expr::Keyword(Keyword::Null))
+    }
+
+    /// Check if the expression is between two values.
+    pub fn between<A, B>(self, a: A, b: B) -> Self
+    where
+        A: Into<Expr>,
+        B: Into<Expr>,
+    {
+        self.binary(
+            BinaryOp::Between,
+            Expr::Binary(Box::new(a.into()), BinaryOp::And, Box::new(b.into())),
+        )
+    }
+
+    /// Check if the expression is not between two values.
+    pub fn not_between<A, B>(self, a: A, b: B) -> Self
+    where
+        A: Into<Expr>,
+        B: Into<Expr>,
+    {
+        self.binary(
+            BinaryOp::NotBetween,
+            Expr::Binary(Box::new(a.into()), BinaryOp::And, Box::new(b.into())),
+        )
+    }
+
+    /// Pattern matching with LIKE.
+    pub fn like<R>(self, pattern: R) -> Self
+    where
+        R: Into<Expr>,
+    {
+        self.binary(BinaryOp::Like, pattern)
+    }
+
+    /// Add a value.
+    #[expect(clippy::should_implement_trait)]
+    pub fn add<R>(self, rhs: R) -> Self
+    where
+        R: Into<Expr>,
+    {
+        self.binary(BinaryOp::Add, rhs)
+    }
+
+    /// Subtract a value.
+    #[expect(clippy::should_implement_trait)]
+    pub fn sub<R>(self, rhs: R) -> Self
+    where
+        R: Into<Expr>,
+    {
+        self.binary(BinaryOp::Sub, rhs)
+    }
+
+    /// Multiply by a value.
+    #[expect(clippy::should_implement_trait)]
+    pub fn mul<R>(self, rhs: R) -> Self
+    where
+        R: Into<Expr>,
+    {
+        self.binary(BinaryOp::Mul, rhs)
+    }
+
+    /// Divide by a value.
+    #[expect(clippy::should_implement_trait)]
+    pub fn div<R>(self, rhs: R) -> Self
+    where
+        R: Into<Expr>,
+    {
+        self.binary(BinaryOp::Div, rhs)
     }
 
     /// Replace NULL with the specified value using COALESCE.
@@ -205,6 +294,11 @@ impl Expr {
         )
     }
 
+    /// Express a `IN` subquery expression.
+    pub fn in_subquery(self, query: crate::query::Select) -> Expr {
+        self.binary(BinaryOp::In, Expr::SubQuery(Box::new(query)))
+    }
+
     /// Apply any unary operator to the expression.
     pub fn unary(self, op: UnaryOp) -> Expr {
         Expr::Unary(op, Box::new(self))
@@ -220,7 +314,7 @@ impl Expr {
 /// Unary operators.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[non_exhaustive]
-#[expect(missing_docs)] // trivial
+#[expect(missing_docs)]
 pub enum UnaryOp {
     Not,
 }
@@ -228,7 +322,7 @@ pub enum UnaryOp {
 /// Binary operators.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[non_exhaustive]
-#[expect(missing_docs)] // trivial
+#[expect(missing_docs)]
 pub enum BinaryOp {
     And,
     Or,
@@ -276,6 +370,7 @@ pub(crate) fn write_expr<W: SqlWriter>(w: &mut W, expr: &Expr) {
     match expr {
         Expr::Column(col) => write_column_ref(w, col),
         Expr::Asterisk => w.push_char('*'),
+        Expr::Keyword(Keyword::Null) => w.push_str("NULL"),
         Expr::Tuple(exprs) => write_tuple(w, exprs),
         Expr::Value(value) => write_value(w, value.clone()),
         Expr::Unary(unary, expr) => write_unary_expr(w, unary, expr),
@@ -291,6 +386,11 @@ pub(crate) fn write_expr<W: SqlWriter>(w: &mut W, expr: &Expr) {
             _ => write_binary_expr(w, lhs, op, rhs),
         },
         Expr::FunctionCall(call) => write_function_call(w, call),
+        Expr::SubQuery(query) => {
+            w.push_char('(');
+            write_select(w, query);
+            w.push_char(')');
+        }
     }
 }
 
@@ -317,9 +417,19 @@ fn write_unary_op<W: SqlWriter>(w: &mut W, op: &UnaryOp) {
 }
 
 fn write_binary_expr<W: SqlWriter>(w: &mut W, lhs: &Expr, op: &BinaryOp, rhs: &Expr) {
+    let binop = Operator::Binary(*op);
+
     let mut left_paren = true;
     left_paren &= !well_known_no_parentheses(lhs);
-    left_paren &= !well_known_high_precedence(lhs, &Operator::Binary(*op));
+    left_paren &= !well_known_high_precedence(lhs, &binop);
+    // left associativity allow us to drop the left parentheses
+    if left_paren
+        && let Expr::Binary(_, inner_op, _) = lhs
+        && inner_op == op
+        && well_known_left_associative(op)
+    {
+        left_paren = false;
+    }
     if left_paren {
         w.push_char('(');
     }
@@ -334,7 +444,14 @@ fn write_binary_expr<W: SqlWriter>(w: &mut W, lhs: &Expr, op: &BinaryOp, rhs: &E
 
     let mut right_paren = true;
     right_paren &= !well_known_no_parentheses(rhs);
-    right_paren &= !well_known_high_precedence(rhs, &Operator::Binary(*op));
+    right_paren &= !well_known_high_precedence(rhs, &binop);
+    // workaround represent trinary op between as nested binary ops
+    if right_paren
+        && binop.is_between()
+        && let Expr::Binary(_, BinaryOp::And, _) = rhs
+    {
+        right_paren = false;
+    }
     if right_paren {
         w.push_char('(');
     }
@@ -405,7 +522,25 @@ fn write_column_ref<W: SqlWriter>(w: &mut W, col: &ColumnRef) {
 fn well_known_no_parentheses(expr: &Expr) -> bool {
     matches!(
         expr,
-        Expr::Column(_) | Expr::Tuple(_) | Expr::Value(_) | Expr::Asterisk | Expr::FunctionCall(_)
+        Expr::Column(_)
+            | Expr::Tuple(_)
+            | Expr::Value(_)
+            | Expr::Asterisk
+            | Expr::Keyword(_)
+            | Expr::FunctionCall(_)
+            | Expr::SubQuery(_)
+    )
+}
+
+fn well_known_left_associative(op: &BinaryOp) -> bool {
+    matches!(
+        op,
+        BinaryOp::And
+            | BinaryOp::Or
+            | BinaryOp::Add
+            | BinaryOp::Sub
+            | BinaryOp::Mul
+            | BinaryOp::Div
     )
 }
 
@@ -431,6 +566,7 @@ fn well_known_high_precedence(expr: &Expr, outer_op: &Operator) -> bool {
     false
 }
 
+#[derive(PartialEq)]
 enum Operator {
     Unary(UnaryOp),
     Binary(BinaryOp),
