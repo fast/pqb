@@ -389,3 +389,17 @@ fn select_26() {
         @r#"SELECT "character" FROM "character" WHERE ("size_w" + 1) * 2 = ("size_h" / 2) - 1"#
     );
 }
+
+#[test]
+fn select_27() {
+    assert_snapshot!(
+        Select::new()
+            .columns(["character", "size_w", "size_h"])
+            .from("character")
+            .and_where(Expr::column("size_w").eq(3))
+            .and_where(Expr::column("size_h").eq(4))
+            .and_where(Expr::column("size_h").eq(5))
+            .to_sql(),
+        @r#"SELECT "character", "size_w", "size_h" FROM "character" WHERE "size_w" = 3 AND "size_h" = 4 AND "size_h" = 5"#
+    );
+}
