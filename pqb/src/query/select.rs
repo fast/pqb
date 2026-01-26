@@ -197,6 +197,21 @@ impl Select {
         self
     }
 
+    /// Order by multiple columns.
+    pub fn order_by_columns<T, I>(mut self, cols: I) -> Self
+    where
+        T: IntoColumnRef,
+        I: IntoIterator<Item = (T, Order)>,
+    {
+        for (col, order) in cols {
+            self.orders.push(OrderExpr {
+                expr: Expr::Column(col.into_column_ref()),
+                order,
+            });
+        }
+        self
+    }
+
     /// GROUP BY columns.
     pub fn group_by_columns<T, I>(mut self, cols: I) -> Self
     where
