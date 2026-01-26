@@ -101,6 +101,14 @@ impl Expr {
         Expr::FunctionCall(FunctionCall::count(self))
     }
 
+    /// Replace NULL with the specified value using COALESCE.
+    pub fn if_null<V>(self, value: V) -> Self
+    where
+        V: Into<Expr>,
+    {
+        Expr::FunctionCall(FunctionCall::coalesce(self, value))
+    }
+
     /// Greater than (`>`).
     pub fn gt<R>(self, right: R) -> Self
     where

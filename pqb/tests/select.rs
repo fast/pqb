@@ -106,3 +106,15 @@ fn select_6() {
         @r#"SELECT "aspect", MAX("image") FROM "glyph" GROUP BY "aspect" HAVING "aspect" > 2"#
     );
 }
+
+#[test]
+fn select_7() {
+    assert_snapshot!(
+        Select::new()
+            .column("aspect")
+            .from("glyph")
+            .and_where(Expr::column("aspect").if_null(0).gt(2))
+            .to_sql(),
+        @r#"SELECT "aspect" FROM "glyph" WHERE COALESCE("aspect", 0) > 2"#
+    );
+}

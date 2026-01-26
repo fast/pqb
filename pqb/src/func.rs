@@ -32,6 +32,8 @@ pub enum Func {
     Avg,
     /// COUNT function.
     Count,
+    /// COALESCE function.
+    Coalesce,
 }
 
 /// A function call expression.
@@ -104,6 +106,18 @@ impl FunctionCall {
             args: vec![Expr::Asterisk],
         }
     }
+
+    /// Create a COALESCE function call.
+    pub fn coalesce<A, B>(a: A, b: B) -> Self
+    where
+        A: Into<Expr>,
+        B: Into<Expr>,
+    {
+        Self {
+            func: Func::Coalesce,
+            args: vec![a.into(), b.into()],
+        }
+    }
 }
 
 impl From<FunctionCall> for Expr {
@@ -119,6 +133,7 @@ pub(crate) fn write_function_call<W: SqlWriter>(w: &mut W, call: &FunctionCall) 
         Func::Sum => w.push_str("SUM"),
         Func::Avg => w.push_str("AVG"),
         Func::Count => w.push_str("COUNT"),
+        Func::Coalesce => w.push_str("COALESCE"),
     }
     w.push_char('(');
     for (i, arg) in call.args.iter().enumerate() {
