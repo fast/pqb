@@ -643,3 +643,74 @@ fn select_43() {
         @r#"SELECT "id" FROM "glyph" WHERE TRUE"#
     );
 }
+
+#[test]
+fn select_44() {
+    assert_snapshot!(
+        Select::new()
+            .column("id")
+            .from("glyph")
+            .and_where(Expr::column("aspect").lt(8).not())
+            .to_sql(),
+        @r#"SELECT "id" FROM "glyph" WHERE NOT "aspect" < 8"#
+    );
+}
+
+#[test]
+fn select_45() {
+    assert_snapshot!(
+        Select::new()
+            .column("id")
+            .from("glyph")
+            .and_where(Expr::column("aspect").lt(8).or(Expr::column("aspect").is_not_null()).not())
+            .to_sql(),
+        @r#"SELECT "id" FROM "glyph" WHERE NOT ("aspect" < 8 OR "aspect" IS NOT NULL)"#
+    );
+}
+
+#[test]
+fn select_46() {
+    assert_snapshot!(
+        Select::new()
+            .column("id")
+            .from("glyph")
+            .and_where(Expr::column("aspect").lt(8).not())
+            .to_sql(),
+        @r#"SELECT "id" FROM "glyph" WHERE NOT "aspect" < 8"#
+    );
+}
+
+#[test]
+fn select_47() {
+    assert_snapshot!(
+        Select::new()
+            .column("id")
+            .from("glyph")
+            .and_where(Expr::column("aspect").lt(8).and(Expr::column("aspect").is_not_null()).not())
+            .to_sql(),
+        @r#"SELECT "id" FROM "glyph" WHERE NOT ("aspect" < 8 AND "aspect" IS NOT NULL)"#
+    );
+}
+
+#[test]
+fn select_48() {
+    assert_snapshot!(
+        Select::new()
+            .column("id")
+            .from("glyph")
+            .and_where(Expr::tuple([Expr::column("aspect"), Expr::value(100)]).lt(Expr::tuple([Expr::value(8), Expr::value(100)])))
+            .to_sql(),
+        @r#"SELECT "id" FROM "glyph" WHERE ("aspect", 100) < (8, 100)"#
+    );
+}
+
+#[test]
+fn select_49() {
+    assert_snapshot!(
+        Select::new()
+            .expr(Expr::asterisk())
+            .from("character")
+            .to_sql(),
+        @r#"SELECT * FROM "character""#
+    );
+}
