@@ -213,3 +213,17 @@ fn select_13() {
         @r#"SELECT "aspect" FROM "glyph" WHERE COALESCE("aspect", 0) > 2 ORDER BY "glyph"."id" ASC, "glyph"."aspect" DESC"#
     );
 }
+
+#[test]
+fn select_14() {
+    assert_snapshot!(
+        Select::new()
+            .columns(["id", "aspect"])
+            .expr(Expr::column("image").max())
+            .from("glyph")
+            .group_by_columns([("glyph", "id"), ("glyph", "aspect")])
+            .and_having(Expr::column("aspect").gt(2))
+            .to_sql(),
+        @r#"SELECT "id", "aspect", MAX("image") FROM "glyph" GROUP BY "glyph"."id", "glyph"."aspect" HAVING "aspect" > 2"#
+    );
+}
