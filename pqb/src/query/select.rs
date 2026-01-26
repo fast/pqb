@@ -17,9 +17,11 @@ use crate::expr::write_expr;
 use crate::types::Iden;
 use crate::types::IntoColumnRef;
 use crate::types::IntoIden;
+use crate::types::IntoTableRef;
+use crate::types::JoinType;
 use crate::types::TableRef;
 use crate::types::write_iden;
-use crate::types::write_table_name;
+use crate::types::write_table_ref;
 use crate::value::write_value;
 use crate::writer::SqlWriter;
 
@@ -28,15 +30,49 @@ use crate::writer::SqlWriter;
 pub struct Select {
     selects: Vec<SelectExpr>,
     from: Vec<TableRef>,
+    joins: Vec<JoinExpr>,
     conditions: Vec<Expr>,
+    groups: Vec<Expr>,
+    having: Vec<Expr>,
     limit: Option<u64>,
     offset: Option<u64>,
 }
 
+/// Join expression.
+#[derive(Debug, Clone, PartialEq)]
+pub struct JoinExpr {
+    join_type: JoinType,
+    table: TableRef,
+    on: Option<Expr>,
+}
+
 impl Select {
     /// From table.
-    pub fn from(mut self, table: impl Into<TableRef>) -> Self {
+    pub fn from<R>(mut self, table: R) -> Self
+    where
+        R: IntoTableRef,
+    {
         self.from.push(table.into());
+        self
+    }
+
+    /// From table with alias.
+    pub fn from_as<R, A>(mut self, table: R, alias: A) -> Self
+    where
+        R: IntoTableRef,
+        A: IntoIden,
+    {
+        self.from.push(table.into().alias(alias.into_iden()));
+        self
+    }
+
+    /// From sub-query.
+    pub fn from_subquery<T>(mut self, query: Select, alias: T) -> Self
+    where
+        T: IntoIden,
+    {
+        self.from
+            .push(TableRef::SubQuery(query.into(), alias.into_iden()));
         self
     }
 
@@ -46,6 +82,18 @@ impl Select {
         T: Into<SelectExpr>,
     {
         self.selects.push(expr.into());
+        self
+    }
+
+    /// Add a function to the select expression list.
+    pub fn func<F>(mut self, func: F) -> Self
+    where
+        F: Into<Expr>,
+    {
+        self.selects.push(SelectExpr {
+            expr: func.into(),
+            alias: None,
+        });
         self
     }
 
@@ -100,6 +148,53 @@ impl Select {
         self
     }
 
+    /// Left join with another table.
+    pub fn left_join<T, E>(mut self, table: T, on: E) -> Self
+    where
+        T: IntoTableRef,
+        E: Into<Expr>,
+    {
+        self.joins.push(JoinExpr {
+            join_type: JoinType::LeftJoin,
+            table: table.into(),
+            on: Some(on.into()),
+        });
+        self
+    }
+
+    /// GROUP BY columns.
+    pub fn group_by_columns<T, I>(mut self, cols: I) -> Self
+    where
+        T: IntoColumnRef,
+        I: IntoIterator<Item = T>,
+    {
+        for col in cols {
+            self.groups.push(Expr::Column(col.into_column_ref()));
+        }
+        self
+    }
+
+    /// GROUP BY expressions.
+    pub fn group_by_exprs<T, I>(mut self, exprs: I) -> Self
+    where
+        T: Into<Expr>,
+        I: IntoIterator<Item = T>,
+    {
+        for expr in exprs {
+            self.groups.push(expr.into());
+        }
+        self
+    }
+
+    /// HAVING condition.
+    pub fn and_having<T>(mut self, expr: T) -> Self
+    where
+        T: Into<Expr>,
+    {
+        self.having.push(expr.into());
+        self
+    }
+
     /// Offset number of returned rows.
     pub fn offset(mut self, offset: u64) -> Self {
         self.offset = Some(offset);
@@ -115,7 +210,7 @@ impl Select {
     /// Convert the select statement to a PostgreSQL query string.
     pub fn to_sql(&self) -> String {
         let mut sql = String::new();
-        write_select_statement(&mut sql, self);
+        write_select(&mut sql, self);
         sql
     }
 }
@@ -146,7 +241,7 @@ where
     }
 }
 
-pub(crate) fn write_select_statement<W: SqlWriter>(w: &mut W, select: &Select) {
+pub(crate) fn write_select<W: SqlWriter>(w: &mut W, select: &Select) {
     w.push_str("SELECT ");
 
     for (i, select_expr) in select.selects.iter().enumerate() {
@@ -162,20 +257,38 @@ pub(crate) fn write_select_statement<W: SqlWriter>(w: &mut W, select: &Select) {
         } else {
             w.push_str(", ");
         }
-        match table_ref {
-            TableRef::Table(table_name, alias) => {
-                write_table_name(w, table_name);
-                if let Some(alias) = alias {
-                    w.push_str(" AS ");
-                    write_iden(w, alias);
-                }
-            }
+        write_table_ref(w, table_ref);
+    }
+
+    for join in &select.joins {
+        match join.join_type {
+            JoinType::LeftJoin => w.push_str(" LEFT JOIN "),
+        }
+        write_table_ref(w, &join.table);
+        if let Some(on) = &join.on {
+            w.push_str(" ON ");
+            write_expr(w, on);
         }
     }
 
     if let Some(condition) = Expr::from_conditions(select.conditions.clone()) {
         w.push_str(" WHERE ");
         write_expr(w, &condition);
+    }
+
+    if !select.groups.is_empty() {
+        w.push_str(" GROUP BY ");
+        for (i, group) in select.groups.iter().enumerate() {
+            if i > 0 {
+                w.push_str(", ");
+            }
+            write_expr(w, group);
+        }
+    }
+
+    if let Some(having) = Expr::from_conditions(select.having.clone()) {
+        w.push_str(" HAVING ");
+        write_expr(w, &having);
     }
 
     if let Some(limit) = select.limit {

@@ -16,6 +16,8 @@
 
 use std::borrow::Cow;
 
+use crate::query::Select;
+use crate::query::write_select;
 use crate::writer::SqlWriter;
 
 mod qualification;
@@ -106,6 +108,21 @@ pub struct Asterisk;
 pub enum TableRef {
     /// A table identifier with optional Alias. Potentially qualified.
     Table(TableName, Option<Iden>),
+    /// Subquery with alias
+    SubQuery(Box<Select>, Iden),
+}
+
+impl TableRef {
+    /// Add or replace the current alias
+    pub fn alias<A>(self, alias: A) -> Self
+    where
+        A: IntoIden,
+    {
+        match self {
+            Self::Table(table, _) => Self::Table(table, Some(alias.into_iden())),
+            Self::SubQuery(statement, _) => Self::SubQuery(statement, alias.into_iden()),
+        }
+    }
 }
 
 impl<T> From<T> for TableRef
@@ -185,17 +202,12 @@ where
 /// A trait for types that can be converted into a column reference.
 pub trait IntoColumnRef: Into<ColumnRef> {
     /// Convert into a column reference.
-    fn into_column_ref(self) -> ColumnRef;
-}
-
-impl<T> IntoColumnRef for T
-where
-    T: Into<ColumnRef>,
-{
     fn into_column_ref(self) -> ColumnRef {
         self.into()
     }
 }
+
+impl<T> IntoColumnRef for T where T: Into<ColumnRef> {}
 
 /// An identifier that represents a database name.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -212,6 +224,14 @@ pub struct TableName(pub Option<SchemaName>, pub Iden);
 /// A column name, potentially qualified as `(database.)(schema.)(table.)column`.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct ColumnName(pub Option<TableName>, pub Iden);
+
+/// Join types.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
+#[expect(missing_docs)]
+pub enum JoinType {
+    LeftJoin,
+}
 
 pub(crate) fn write_iden<W: SqlWriter>(w: &mut W, iden: &Iden) {
     // PostgreSQL uses double quotes for quoting identifiers.
@@ -249,4 +269,23 @@ pub(crate) fn write_schema_name<W: SqlWriter>(w: &mut W, schema_name: &SchemaNam
         w.push_char('.');
     }
     write_iden(w, schema);
+}
+
+pub(crate) fn write_table_ref<W: SqlWriter>(w: &mut W, table_ref: &TableRef) {
+    match table_ref {
+        TableRef::Table(table_name, alias) => {
+            write_table_name(w, table_name);
+            if let Some(alias) = alias {
+                w.push_str(" AS ");
+                write_iden(w, alias);
+            }
+        }
+        TableRef::SubQuery(query, alias) => {
+            w.push_char('(');
+            write_select(w, query);
+            w.push_char(')');
+            w.push_str(" AS ");
+            write_iden(w, alias);
+        }
+    }
 }
