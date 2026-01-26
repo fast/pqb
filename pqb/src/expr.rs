@@ -74,7 +74,7 @@ impl Expr {
     }
 }
 
-/// # Aggregate functions
+/// # Expression combinators
 impl Expr {
     /// Create a MAX() function call.
     pub fn max(self) -> Self {
@@ -100,10 +100,7 @@ impl Expr {
     pub fn count(self) -> Self {
         Expr::FunctionCall(FunctionCall::count(self))
     }
-}
 
-/// # Comparison operations
-impl Expr {
     /// Greater than (`>`).
     pub fn gt<R>(self, right: R) -> Self
     where
@@ -135,10 +132,7 @@ impl Expr {
     {
         self.binary(BinaryOp::LessThanOrEqual, right)
     }
-}
 
-/// # Expression combinators
-impl Expr {
     /// Create any binary operation.
     pub fn binary<R>(self, op: BinaryOp, rhs: R) -> Self
     where
