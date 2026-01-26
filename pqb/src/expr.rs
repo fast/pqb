@@ -173,6 +173,14 @@ impl Expr {
         self.binary(BinaryOp::Equal, right)
     }
 
+    /// Express an equality comparison between two column references.
+    pub fn equals<R>(self, col: R) -> Expr
+    where
+        R: Into<crate::types::ColumnRef>,
+    {
+        self.binary(BinaryOp::Equal, Expr::Column(col.into()))
+    }
+
     /// Express a not equal (`<>`) expression.
     pub fn ne<R>(self, right: R) -> Expr
     where

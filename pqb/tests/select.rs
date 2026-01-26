@@ -118,3 +118,18 @@ fn select_7() {
         @r#"SELECT "aspect" FROM "glyph" WHERE COALESCE("aspect", 0) > 2"#
     );
 }
+
+#[test]
+fn select_8() {
+    assert_snapshot!(
+        Select::new()
+            .column("character")
+            .from("character")
+            .left_join(
+                "font",
+                Expr::column(("character", "font_id")).equals(("font", "id")),
+            )
+            .to_sql(),
+        @r#"SELECT "character" FROM "character" LEFT JOIN "font" ON "character"."font_id" = "font"."id""#
+    );
+}

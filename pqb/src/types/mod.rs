@@ -178,17 +178,6 @@ where
     }
 }
 
-impl<Database, Schema, Table> From<(Database, Schema, Table, Asterisk)> for ColumnRef
-where
-    Database: IntoIden,
-    Schema: IntoIden,
-    Table: IntoIden,
-{
-    fn from(table: (Database, Schema, Table, Asterisk)) -> Self {
-        ColumnRef::Asterisk(Some((table.0, table.1, table.2).into()))
-    }
-}
-
 impl<T> From<T> for ColumnRef
 where
     T: Into<ColumnName>,
@@ -201,17 +190,12 @@ where
 /// A trait for types that can be converted into a column reference.
 pub trait IntoColumnRef: Into<ColumnRef> {
     /// Convert into a column reference.
-    fn into_column_ref(self) -> ColumnRef;
-}
-
-impl<T> IntoColumnRef for T
-where
-    T: Into<ColumnRef>,
-{
     fn into_column_ref(self) -> ColumnRef {
         self.into()
     }
 }
+
+impl<T> IntoColumnRef for T where T: Into<ColumnRef> {}
 
 /// An identifier that represents a database name.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -228,6 +212,14 @@ pub struct TableName(pub Option<SchemaName>, pub Iden);
 /// A column name, potentially qualified as `(database.)(schema.)(table.)column`.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct ColumnName(pub Option<TableName>, pub Iden);
+
+/// Join types.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
+#[expect(missing_docs)]
+pub enum JoinType {
+    LeftJoin,
+}
 
 pub(crate) fn write_iden<W: SqlWriter>(w: &mut W, iden: &Iden) {
     // PostgreSQL uses double quotes for quoting identifiers.

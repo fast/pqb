@@ -18,6 +18,7 @@ use crate::types::Iden;
 use crate::types::IntoColumnRef;
 use crate::types::IntoIden;
 use crate::types::IntoTableRef;
+use crate::types::JoinType;
 use crate::types::TableRef;
 use crate::types::write_iden;
 use crate::types::write_table_name;
@@ -29,11 +30,20 @@ use crate::writer::SqlWriter;
 pub struct Select {
     selects: Vec<SelectExpr>,
     from: Vec<TableRef>,
+    joins: Vec<JoinExpr>,
     conditions: Vec<Expr>,
     groups: Vec<Expr>,
     having: Vec<Expr>,
     limit: Option<u64>,
     offset: Option<u64>,
+}
+
+/// Join expression.
+#[derive(Debug, Clone, PartialEq)]
+pub struct JoinExpr {
+    join_type: JoinType,
+    table: TableRef,
+    on: Expr,
 }
 
 impl Select {
@@ -135,6 +145,20 @@ impl Select {
         T: Into<Expr>,
     {
         self.conditions.push(expr.into());
+        self
+    }
+
+    /// Left join with another table.
+    pub fn left_join<T, E>(mut self, table: T, on: E) -> Self
+    where
+        T: IntoTableRef,
+        E: Into<Expr>,
+    {
+        self.joins.push(JoinExpr {
+            join_type: JoinType::LeftJoin,
+            table: table.into(),
+            on: on.into(),
+        });
         self
     }
 
@@ -249,6 +273,30 @@ pub(crate) fn write_select<W: SqlWriter>(w: &mut W, select: &Select) {
                 write_iden(w, alias);
             }
         }
+    }
+
+    for join in &select.joins {
+        match join.join_type {
+            JoinType::LeftJoin => w.push_str(" LEFT JOIN "),
+        }
+        match &join.table {
+            TableRef::Table(table_name, alias) => {
+                write_table_name(w, table_name);
+                if let Some(alias) = alias {
+                    w.push_str(" AS ");
+                    write_iden(w, alias);
+                }
+            }
+            TableRef::SubQuery(query, alias) => {
+                w.push_char('(');
+                write_select(w, query);
+                w.push_char(')');
+                w.push_str(" AS ");
+                write_iden(w, alias);
+            }
+        }
+        w.push_str(" ON ");
+        write_expr(w, &join.on);
     }
 
     if let Some(condition) = Expr::from_conditions(select.conditions.clone()) {
