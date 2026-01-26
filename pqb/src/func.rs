@@ -21,18 +21,14 @@ use crate::writer::SqlWriter;
 
 /// SQL built-in functions.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
+#[expect(missing_docs)]
 pub enum Func {
-    /// MAX function.
     Max,
-    /// MIN function.
     Min,
-    /// SUM function.
     Sum,
-    /// AVG function.
     Avg,
-    /// COUNT function.
     Count,
-    /// COALESCE function.
     Coalesce,
 }
 
