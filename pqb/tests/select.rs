@@ -532,12 +532,12 @@ fn select_36() {
 
 #[test]
 fn select_37() {
-    assert_snapshot!(
-        Select::new()
-            .column("id")
-            .from("glyph")
-            .and_where(Expr::custom("TRUE").or(Expr::custom("FALSE")))
-            .to_sql(),
-        @r#"SELECT "id" FROM "glyph" WHERE (TRUE) OR (FALSE)"#
-    );
+    let (statement, values) = Select::new()
+        .column("id")
+        .from("glyph")
+        .and_where(Expr::custom("TRUE").or(Expr::custom("FALSE")))
+        .to_values()
+        .into_parts();
+    assert_eq!(statement, r#"SELECT "id" FROM "glyph" WHERE (TRUE) OR (FALSE)"#);
+    assert!(values.is_empty());
 }
