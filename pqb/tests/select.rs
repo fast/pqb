@@ -458,7 +458,21 @@ fn select_32() {
 }
 
 #[test]
-fn select_33() {
+fn select_33a() {
+    assert_snapshot!(
+        Select::new()
+            .column("image")
+            .from("glyph")
+            .and_where(Expr::column("aspect").in_subquery(
+                Select::new().expr(Expr::custom("3 + 2 * 2")),
+            ))
+            .to_sql(),
+        @r#"SELECT "image" FROM "glyph" WHERE "aspect" IN (SELECT 3 + 2 * 2)"#
+    );
+}
+
+#[test]
+fn select_33b() {
     assert_snapshot!(
         Select::new()
             .column("image")

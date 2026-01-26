@@ -52,6 +52,8 @@ pub enum Expr {
     Binary(Box<Expr>, BinaryOp, Box<Expr>),
     FunctionCall(FunctionCall),
     SubQuery(Option<SubQueryOp>, Box<Select>),
+    /// Custom SQL expression.
+    Custom(String),
 }
 
 /// # Expression constructors
@@ -83,6 +85,14 @@ impl Expr {
         I: IntoIterator<Item = Self>,
     {
         Expr::Tuple(n.into_iter().collect())
+    }
+
+    /// Express a custom SQL expression.
+    pub fn custom<S>(sql: S) -> Self
+    where
+        S: Into<String>,
+    {
+        Expr::Custom(sql.into())
     }
 }
 
@@ -411,6 +421,7 @@ pub(crate) fn write_expr<W: SqlWriter>(w: &mut W, expr: &Expr) {
             write_select(w, query);
             w.push_char(')');
         }
+        Expr::Custom(sql) => w.push_str(sql),
     }
 }
 
