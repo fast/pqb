@@ -36,8 +36,8 @@ pub enum Func {
 /// A function call expression.
 #[derive(Debug, Clone, PartialEq)]
 pub struct FunctionCall {
-    func: Func,
-    expr: Box<Expr>,
+    pub(crate) func: Func,
+    pub(crate) expr: Box<Expr>,
 }
 
 impl FunctionCall {
@@ -107,24 +107,21 @@ impl FunctionCall {
 
 impl From<FunctionCall> for Expr {
     fn from(call: FunctionCall) -> Self {
-        Expr::FunctionCall {
-            func: call.func,
-            expr: call.expr,
-        }
+        Expr::FunctionCall(call)
     }
 }
 
-pub(crate) fn write_function_call<W: SqlWriter>(w: &mut W, func: &Func, expr: &Expr) {
-    match func {
+pub(crate) fn write_function_call<W: SqlWriter>(w: &mut W, call: &FunctionCall) {
+    match call.func {
         Func::Max => w.push_str("MAX("),
         Func::Min => w.push_str("MIN("),
         Func::Sum => w.push_str("SUM("),
         Func::Avg => w.push_str("AVG("),
         Func::Count => w.push_str("COUNT("),
     }
-    match expr {
+    match call.expr.as_ref() {
         Expr::Asterisk => w.push_char('*'),
-        _ => crate::expr::write_expr(w, expr),
+        _ => crate::expr::write_expr(w, &call.expr),
     }
     w.push_char(')');
 }

@@ -17,7 +17,8 @@
 //! [`Expr`] is an arbitrary, dynamically-typed SQL expression. It can be used in select fields,
 //! where clauses and many other places.
 
-use crate::func::Func;
+use crate::func::FunctionCall;
+use crate::func::write_function_call;
 use crate::types::ColumnName;
 use crate::types::ColumnRef;
 use crate::types::IntoColumnRef;
@@ -38,10 +39,7 @@ pub enum Expr {
     Value(Value),
     Unary(UnaryOp, Box<Expr>),
     Binary(Box<Expr>, BinaryOp, Box<Expr>),
-    FunctionCall {
-        func: Func,
-        expr: Box<Expr>,
-    },
+    FunctionCall(FunctionCall),
 }
 
 /// # Expression constructors
@@ -80,42 +78,27 @@ impl Expr {
 impl Expr {
     /// Create a MAX() function call.
     pub fn max(self) -> Self {
-        Expr::FunctionCall {
-            func: Func::Max,
-            expr: Box::new(self),
-        }
+        Expr::FunctionCall(FunctionCall::max(self))
     }
 
     /// Create a MIN() function call.
     pub fn min(self) -> Self {
-        Expr::FunctionCall {
-            func: Func::Min,
-            expr: Box::new(self),
-        }
+        Expr::FunctionCall(FunctionCall::min(self))
     }
 
     /// Create a SUM() function call.
     pub fn sum(self) -> Self {
-        Expr::FunctionCall {
-            func: Func::Sum,
-            expr: Box::new(self),
-        }
+        Expr::FunctionCall(FunctionCall::sum(self))
     }
 
     /// Create an AVG() function call.
     pub fn avg(self) -> Self {
-        Expr::FunctionCall {
-            func: Func::Avg,
-            expr: Box::new(self),
-        }
+        Expr::FunctionCall(FunctionCall::avg(self))
     }
 
     /// Create a COUNT() function call.
     pub fn count(self) -> Self {
-        Expr::FunctionCall {
-            func: Func::Count,
-            expr: Box::new(self),
-        }
+        Expr::FunctionCall(FunctionCall::count(self))
     }
 }
 
@@ -305,9 +288,7 @@ pub(crate) fn write_expr<W: SqlWriter>(w: &mut W, expr: &Expr) {
             }
             _ => write_binary_expr(w, lhs, op, rhs),
         },
-        Expr::FunctionCall { func, expr } => {
-            crate::func::write_function_call(w, func, expr);
-        }
+        Expr::FunctionCall(call) => write_function_call(w, call),
     }
 }
 
@@ -420,7 +401,10 @@ fn write_column_ref<W: SqlWriter>(w: &mut W, col: &ColumnRef) {
 }
 
 fn well_known_no_parentheses(expr: &Expr) -> bool {
-    matches!(expr, Expr::Column(_) | Expr::Tuple(_) | Expr::Value(_) | Expr::Asterisk | Expr::FunctionCall { .. })
+    matches!(
+        expr,
+        Expr::Column(_) | Expr::Tuple(_) | Expr::Value(_) | Expr::Asterisk | Expr::FunctionCall(_)
+    )
 }
 
 fn well_known_high_precedence(expr: &Expr, outer_op: &Operator) -> bool {
