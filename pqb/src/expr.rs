@@ -491,6 +491,16 @@ fn well_known_no_parentheses(expr: &Expr) -> bool {
     )
 }
 
+/// Check if the operator is left-associative.
+/// For left-associative operators, nested same operators don't need parentheses.
+/// e.g., `a OR b OR c` instead of `(a OR b) OR c`
+fn is_left_associative(op: &BinaryOp) -> bool {
+    matches!(
+        op,
+        BinaryOp::And | BinaryOp::Or | BinaryOp::Add | BinaryOp::Sub | BinaryOp::Mul | BinaryOp::Div
+    )
+}
+
 fn well_known_high_precedence(expr: &Expr, outer_op: &Operator) -> bool {
     let inner_op = if let Expr::Binary(_, op, _) = expr {
         Operator::Binary(*op)
@@ -498,9 +508,9 @@ fn well_known_high_precedence(expr: &Expr, outer_op: &Operator) -> bool {
         return false;
     };
 
-    // Same operator precedence - no parentheses needed (left-associative)
+    // Left-associative: same operator, no parentheses needed
     if inner_op == *outer_op {
-        return true;
+        return matches!(outer_op, Operator::Binary(op) if is_left_associative(op));
     }
 
     if inner_op.is_arithmetic() || inner_op.is_shift() {
@@ -518,7 +528,7 @@ fn well_known_high_precedence(expr: &Expr, outer_op: &Operator) -> bool {
     false
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(PartialEq)]
 enum Operator {
     Unary(UnaryOp),
     Binary(BinaryOp),
