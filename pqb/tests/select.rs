@@ -341,6 +341,18 @@ fn select_22() {
 }
 
 #[test]
+fn select_23() {
+    // pqb style: no condition, no WHERE clause
+    assert_snapshot!(
+        Select::new()
+            .column("character")
+            .from("character")
+            .to_sql(),
+        @r#"SELECT "character" FROM "character""#
+    );
+}
+
+#[test]
 fn select_25() {
     assert_snapshot!(
         Select::new()
