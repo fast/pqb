@@ -152,6 +152,22 @@ impl Expr {
         self.binary(BinaryOp::Like, pattern)
     }
 
+    /// Add a value.
+    pub fn add<R>(self, rhs: R) -> Self
+    where
+        R: Into<Expr>,
+    {
+        self.binary(BinaryOp::Add, rhs)
+    }
+
+    /// Subtract a value.
+    pub fn sub<R>(self, rhs: R) -> Self
+    where
+        R: Into<Expr>,
+    {
+        self.binary(BinaryOp::Sub, rhs)
+    }
+
     /// Multiply by a value.
     pub fn mul<R>(self, rhs: R) -> Self
     where
