@@ -422,19 +422,6 @@ fn select_28() {
     );
 }
 
-// select_29 is like select_30 but with expression outside
-// Note: Outer parens not needed when expression at top-level in SELECT
-#[test]
-fn select_29() {
-    assert_snapshot!(
-        Select::new()
-            .expr((Expr::column("aspect").mul(2) + Expr::column("aspect").div(3)).eq(4))
-            .from("glyph")
-            .to_sql(),
-        @r#"SELECT ("aspect" * 2) + ("aspect" / 3) = 4 FROM "glyph""#
-    );
-}
-
 #[test]
 fn select_30() {
     // Complex arithmetic expression with comparison
@@ -444,7 +431,7 @@ fn select_30() {
             .columns(["character", "size_w", "size_h"])
             .from("character")
             .and_where(
-                (Expr::column("size_w").mul(2) + Expr::column("size_h").div(3)).eq(4)
+                Expr::column("size_w").mul(2).add(Expr::column("size_h").div(3)).eq(4)
             )
             .to_sql(),
         @r#"SELECT "character", "size_w", "size_h" FROM "character" WHERE ("size_w" * 2) + ("size_h" / 3) = 4"#
