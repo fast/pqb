@@ -604,3 +604,30 @@ fn select_40() {
         @r#"SELECT "id" FROM "glyph" WHERE "aspect" IS NULL OR ("aspect" IS NOT NULL AND "aspect" < 8)"#
     );
 }
+
+#[test]
+fn select_41() {
+    assert_snapshot!(
+        Select::new()
+            .column("aspect")
+            .expr(Expr::column("image").max())
+            .from("glyph")
+            .group_by_columns(["aspect"])
+            .and_having(Expr::column("aspect").gt(2))
+            .to_sql(),
+        @r#"SELECT "aspect", MAX("image") FROM "glyph" GROUP BY "aspect" HAVING "aspect" > 2"#
+    );
+}
+
+#[test]
+fn select_42() {
+    assert_snapshot!(
+        Select::new()
+            .column("id")
+            .from("glyph")
+            .and_where(Expr::column("aspect").lt(8))
+            .and_where(Expr::column("aspect").is_not_null())
+            .to_sql(),
+        @r#"SELECT "id" FROM "glyph" WHERE "aspect" < 8 AND "aspect" IS NOT NULL"#
+    );
+}
