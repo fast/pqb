@@ -132,6 +132,18 @@ impl Expr {
         )
     }
 
+    /// Check if the expression is not between two values.
+    pub fn not_between<A, B>(self, a: A, b: B) -> Self
+    where
+        A: Into<Expr>,
+        B: Into<Expr>,
+    {
+        self.binary(
+            BinaryOp::NotBetween,
+            Expr::Binary(Box::new(a.into()), BinaryOp::And, Box::new(b.into())),
+        )
+    }
+
     /// Replace NULL with the specified value using COALESCE.
     pub fn if_null<V>(self, value: V) -> Self
     where

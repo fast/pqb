@@ -264,3 +264,16 @@ fn select_17() {
         @r#"SELECT "glyph"."image" FROM "glyph" WHERE "glyph"."aspect" BETWEEN 3 AND 5"#
     );
 }
+
+#[test]
+fn select_18() {
+    assert_snapshot!(
+        Select::new()
+            .column("aspect")
+            .from("glyph")
+            .and_where(Expr::column("aspect").between(3, 5))
+            .and_where(Expr::column("aspect").not_between(8, 10))
+            .to_sql(),
+        @r#"SELECT "aspect" FROM "glyph" WHERE ("aspect" BETWEEN 3 AND 5) AND ("aspect" NOT BETWEEN 8 AND 10)"#
+    );
+}
