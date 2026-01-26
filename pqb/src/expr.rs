@@ -152,6 +152,22 @@ impl Expr {
         self.binary(BinaryOp::Like, pattern)
     }
 
+    /// Multiply by a value.
+    pub fn mul<R>(self, rhs: R) -> Self
+    where
+        R: Into<Expr>,
+    {
+        self.binary(BinaryOp::Mul, rhs)
+    }
+
+    /// Divide by a value.
+    pub fn div<R>(self, rhs: R) -> Self
+    where
+        R: Into<Expr>,
+    {
+        self.binary(BinaryOp::Div, rhs)
+    }
+
     /// Replace NULL with the specified value using COALESCE.
     pub fn if_null<V>(self, value: V) -> Self
     where

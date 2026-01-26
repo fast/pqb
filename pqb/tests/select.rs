@@ -301,3 +301,15 @@ fn select_20() {
         @r#"SELECT "character" FROM "character" WHERE "character" LIKE 'A'"#
     );
 }
+
+#[test]
+fn select_25() {
+    assert_snapshot!(
+        Select::new()
+            .column("character")
+            .from("character")
+            .and_where(Expr::column("size_w").mul(2).eq(Expr::column("size_h").div(2)))
+            .to_sql(),
+        @r#"SELECT "character" FROM "character" WHERE "size_w" * 2 = "size_h" / 2"#
+    );
+}
