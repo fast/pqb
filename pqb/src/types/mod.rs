@@ -178,6 +178,17 @@ where
     }
 }
 
+impl<Database, Schema, Table> From<(Database, Schema, Table, Asterisk)> for ColumnRef
+where
+    Database: IntoIden,
+    Schema: IntoIden,
+    Table: IntoIden,
+{
+    fn from(table: (Database, Schema, Table, Asterisk)) -> Self {
+        ColumnRef::Asterisk(Some((table.0, table.1, table.2).into()))
+    }
+}
+
 impl<T> From<T> for ColumnRef
 where
     T: Into<ColumnName>,
