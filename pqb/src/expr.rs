@@ -561,7 +561,6 @@ fn well_known_no_parentheses(expr: &Expr) -> bool {
             | Expr::Keyword(_)
             | Expr::FunctionCall(_)
             | Expr::SubQuery(_, _)
-            | Expr::Custom(_)
     )
 }
 
