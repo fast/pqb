@@ -64,3 +64,48 @@ impl SqlWriter for String {
         String::push(self, value)
     }
 }
+
+/// SQL writer that collects parameters for prepared statements.
+pub struct SqlWriterValues {
+    sql: String,
+    values: Vec<Value>,
+    counter: usize,
+}
+
+impl SqlWriterValues {
+    /// Create a new writer for PostgreSQL placeholder style ($1, $2, ...).
+    pub fn new() -> Self {
+        Self {
+            sql: String::new(),
+            values: Vec::new(),
+            counter: 0,
+        }
+    }
+
+    /// Consume the writer and return the SQL string and collected values.
+    pub fn into_parts(self) -> (String, Vec<Value>) {
+        (self.sql, self.values)
+    }
+}
+
+impl Default for SqlWriterValues {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl SqlWriter for SqlWriterValues {
+    fn push_param(&mut self, value: Value) {
+        self.counter += 1;
+        write!(self.sql, "${}", self.counter).unwrap();
+        self.values.push(value);
+    }
+
+    fn push_str(&mut self, value: &str) {
+        self.sql.push_str(value);
+    }
+
+    fn push_char(&mut self, value: char) {
+        self.sql.push(value);
+    }
+}

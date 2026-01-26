@@ -36,3 +36,4 @@ pub mod types;
 pub mod value;
 
 mod writer;
+pub use self::writer::SqlWriterValues;
