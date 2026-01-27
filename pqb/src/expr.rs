@@ -281,6 +281,22 @@ impl Expr {
         self.binary(BinaryOp::NotEqual, right)
     }
 
+    /// Express a `IS` expression.
+    pub fn is<R>(self, right: R) -> Expr
+    where
+        R: Into<Expr>,
+    {
+        self.binary(BinaryOp::Is, right)
+    }
+
+    /// Express a `IS NOT` expression.
+    pub fn is_not<R>(self, right: R) -> Expr
+    where
+        R: Into<Expr>,
+    {
+        self.binary(BinaryOp::IsNot, right)
+    }
+
     /// Express a `IN` expression.
     pub fn is_in<V, I>(self, v: I) -> Expr
     where
