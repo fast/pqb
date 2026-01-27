@@ -14,8 +14,8 @@
 
 use crate::expr::Expr;
 use crate::expr::write_expr;
-use crate::order::Order;
-use crate::order::write_order;
+use crate::query::order::Order;
+use crate::query::order::write_order;
 use crate::types::Iden;
 use crate::types::IntoColumnRef;
 use crate::types::IntoIden;

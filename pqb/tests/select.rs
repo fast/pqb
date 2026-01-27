@@ -15,7 +15,7 @@
 use insta::assert_compact_debug_snapshot;
 use insta::assert_snapshot;
 use pqb::expr::Expr;
-use pqb::order::Order;
+use pqb::query::Order;
 use pqb::query::Select;
 use pqb::types::Asterisk;
 

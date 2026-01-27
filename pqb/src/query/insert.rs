@@ -12,16 +12,5 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//! SQL query statements.
-
-mod delete;
-mod insert;
-mod order;
-mod returning;
-mod select;
-
-pub use self::delete::*;
-pub use self::insert::*;
-pub use self::order::*;
-pub use self::returning::*;
-pub use self::select::*;
+/// Insert any new rows into an existing table
+pub struct Insert {}
