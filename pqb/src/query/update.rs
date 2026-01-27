@@ -13,25 +13,22 @@
 // limitations under the License.
 
 use crate::SqlWriterValues;
-use crate::expr::Expr;
-use crate::expr::write_expr;
-use crate::query::Returning;
-use crate::query::write_returning;
-use crate::types::IntoTableRef;
-use crate::types::TableRef;
-use crate::types::write_table_ref;
+use crate::expr::{Expr, write_expr};
+use crate::query::{Returning, write_returning};
+use crate::types::{Iden, IntoIden, IntoTableRef, TableRef, write_iden, write_table_ref};
 use crate::writer::SqlWriter;
 
-/// Delete existing rows from the table.
+/// Update existing rows in the table.
 #[derive(Default, Debug, Clone, PartialEq)]
-pub struct Delete {
+pub struct Update {
     table: Option<TableRef>,
+    values: Vec<(Iden, Expr)>,
     conditions: Vec<Expr>,
     returning: Option<Returning>,
 }
 
-impl Delete {
-    /// Create a new DELETE query.
+impl Update {
+    /// Create a new UPDATE query.
     pub fn new() -> Self {
         Self::default()
     }
@@ -39,23 +36,35 @@ impl Delete {
     /// Build the SQL string with placeholders and return collected values.
     pub fn to_values(&self) -> SqlWriterValues {
         let mut w = SqlWriterValues::new();
-        write_delete(&mut w, self);
+        write_update(&mut w, self);
         w
     }
 
-    /// Convert the delete statement to a PostgreSQL query string.
+    /// Convert the update statement to a PostgreSQL query string.
     pub fn to_sql(&self) -> String {
         let mut sql = String::new();
-        write_delete(&mut sql, self);
+        write_update(&mut sql, self);
         sql
     }
 
-    /// Specify which table to delete from.
-    pub fn from_table<T>(mut self, table: T) -> Self
+    /// Specify which table to update.
+    pub fn table<T>(mut self, table: T) -> Self
     where
         T: IntoTableRef,
     {
         self.table = Some(table.into());
+        self
+    }
+
+    /// Update column values.
+    pub fn values<T, I>(mut self, values: I) -> Self
+    where
+        T: IntoIden,
+        I: IntoIterator<Item = (T, Expr)>,
+    {
+        for (k, v) in values.into_iter() {
+            self.values.push((k.into_iden(), v));
+        }
         self
     }
 
@@ -69,26 +78,38 @@ impl Delete {
     }
 
     /// RETURNING expressions.
-    pub fn returning(&mut self, returning_cols: Returning) -> &mut Self {
-        self.returning = Some(returning_cols);
+    pub fn returning(mut self, returning: Returning) -> Self {
+        self.returning = Some(returning);
         self
     }
 }
 
-fn write_delete<W: SqlWriter>(w: &mut W, delete: &Delete) {
-    w.push_str("DELETE ");
+fn write_update<W: SqlWriter>(w: &mut W, update: &Update) {
+    w.push_str("UPDATE ");
 
-    if let Some(table) = &delete.table {
-        w.push_str("FROM ");
+    if let Some(table) = &update.table {
         write_table_ref(w, table);
     }
 
-    if let Some(condition) = Expr::from_conditions(delete.conditions.clone()) {
+    if !update.values.is_empty() {
+        w.push_str(" SET ");
+        for (i, (col, val)) in update.values.iter().enumerate() {
+            if i > 0 {
+                w.push_str(", ");
+            }
+            write_iden(w, col);
+            w.push_str(" = ");
+            write_expr(w, val);
+        }
+    }
+
+    if let Some(condition) = Expr::from_conditions(update.conditions.clone()) {
         w.push_str(" WHERE ");
         write_expr(w, &condition);
     }
 
-    if let Some(returning) = &delete.returning {
+    if let Some(returning) = &update.returning {
+        w.push_str(" RETURNING ");
         write_returning(w, returning);
     }
 }

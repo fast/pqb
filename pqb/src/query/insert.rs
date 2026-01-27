@@ -27,7 +27,7 @@ use crate::types::write_iden;
 use crate::types::write_table_ref;
 use crate::writer::SqlWriter;
 
-/// Insert any new rows into an existing table
+/// Insert any new rows into an existing table.
 #[derive(Debug, Default, Clone, PartialEq)]
 pub struct Insert {
     table: Option<TableRef>,
@@ -50,7 +50,7 @@ impl Insert {
         w
     }
 
-    /// Convert the select statement to a PostgreSQL query string.
+    /// Convert the insert statement to a PostgreSQL query string.
     pub fn to_sql(&self) -> String {
         let mut sql = String::new();
         write_insert(&mut sql, self);

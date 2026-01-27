@@ -19,9 +19,11 @@ mod insert;
 mod order;
 mod returning;
 mod select;
+mod update;
 
 pub use self::delete::*;
 pub use self::insert::*;
 pub use self::order::*;
 pub use self::returning::*;
 pub use self::select::*;
+pub use self::update::*;
