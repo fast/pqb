@@ -19,6 +19,7 @@ use crate::types::IntoColumnRef;
 use crate::types::IntoIden;
 use crate::types::IntoTableRef;
 use crate::types::JoinType;
+use crate::types::NullOrdering;
 use crate::types::Order;
 use crate::types::TableRef;
 use crate::types::write_iden;
@@ -54,6 +55,7 @@ pub struct JoinExpr {
 pub struct OrderExpr {
     expr: Expr,
     order: Order,
+    nulls: Option<NullOrdering>,
 }
 
 impl Select {
@@ -213,6 +215,20 @@ impl Select {
         self.orders.push(OrderExpr {
             expr: Expr::Column(col.into_column_ref()),
             order,
+            nulls: None,
+        });
+        self
+    }
+
+    /// Order by column with NULLS FIRST/LAST.
+    pub fn order_by_with_nulls<C>(mut self, col: C, order: Order, nulls: NullOrdering) -> Self
+    where
+        C: IntoColumnRef,
+    {
+        self.orders.push(OrderExpr {
+            expr: Expr::Column(col.into_column_ref()),
+            order,
+            nulls: Some(nulls),
         });
         self
     }
@@ -227,6 +243,7 @@ impl Select {
             self.orders.push(OrderExpr {
                 expr: Expr::Column(col.into_column_ref()),
                 order,
+                nulls: None,
             });
         }
         self
@@ -358,6 +375,12 @@ pub(crate) fn write_select<W: SqlWriter>(w: &mut W, select: &Select) {
             match order.order {
                 Order::Asc => w.push_str(" ASC"),
                 Order::Desc => w.push_str(" DESC"),
+            }
+            if let Some(nulls) = order.nulls {
+                match nulls {
+                    NullOrdering::First => w.push_str(" NULLS FIRST"),
+                    NullOrdering::Last => w.push_str(" NULLS LAST"),
+                }
             }
         }
     }

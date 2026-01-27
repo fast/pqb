@@ -17,6 +17,7 @@ use insta::assert_snapshot;
 use pqb::expr::Expr;
 use pqb::query::Select;
 use pqb::types::Asterisk;
+use pqb::types::NullOrdering;
 use pqb::types::Order;
 
 #[test]
@@ -747,5 +748,19 @@ fn select_50() {
             .inner_join("font", Expr::column(("character", "font_id")).eq(Expr::column(("font", "id"))))
             .to_sql(),
         @r#"SELECT "character".*, "font"."name" FROM "character" INNER JOIN "font" ON "character"."font_id" = "font"."id""#
+    );
+}
+
+#[test]
+fn select_51() {
+    assert_snapshot!(
+        Select::new()
+            .column("aspect")
+            .from("glyph")
+            .and_where(Expr::column("aspect").if_null(0).gt(2))
+            .order_by_with_nulls("image", Order::Desc, NullOrdering::First)
+            .order_by_with_nulls(("glyph", "aspect"), Order::Asc, NullOrdering::Last)
+            .to_sql(),
+        @r#"SELECT "aspect" FROM "glyph" WHERE COALESCE("aspect", 0) > 2 ORDER BY "image" DESC NULLS FIRST, "glyph"."aspect" ASC NULLS LAST"#
     );
 }
