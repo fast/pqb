@@ -31,6 +31,15 @@ pub struct Iden {
 }
 
 impl Iden {
+    /// Create a new identifier from a static str.
+    pub const fn new_static(name: &'static str) -> Self {
+        let escaped = is_escaped_iden(name);
+        Self {
+            name: Cow::Borrowed(name),
+            escaped,
+        }
+    }
+
     /// Create a new identifier.
     pub fn new(name: impl Into<Cow<'static, str>>) -> Self {
         let name = name.into();
