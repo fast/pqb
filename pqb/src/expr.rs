@@ -17,6 +17,8 @@
 //! [`Expr`] is an arbitrary, dynamically-typed SQL expression. It can be used in select fields,
 //! where clauses and many other places.
 
+use std::borrow::Cow;
+
 use crate::func::FunctionCall;
 use crate::func::write_function_call;
 use crate::query::Select;
@@ -52,6 +54,7 @@ pub enum Expr {
     Binary(Box<Expr>, BinaryOp, Box<Expr>),
     FunctionCall(FunctionCall),
     SubQuery(Option<SubQueryOp>, Box<Select>),
+    Custom(Cow<'static, str>),
 }
 
 /// # Expression constructors
@@ -83,6 +86,14 @@ impl Expr {
         I: IntoIterator<Item = Self>,
     {
         Expr::Tuple(n.into_iter().collect())
+    }
+
+    /// Express a custom SQL expression.
+    pub fn custom<T>(expr: T) -> Self
+    where
+        T: Into<Cow<'static, str>>,
+    {
+        Expr::Custom(expr.into())
     }
 }
 
@@ -300,6 +311,23 @@ impl Expr {
         self.binary(BinaryOp::In, Expr::SubQuery(None, Box::new(query)))
     }
 
+    /// Express a `IN` expression with tuple values.
+    pub fn in_tuples<T, I>(self, tuples: I) -> Expr
+    where
+        T: IntoIterator<Item = Expr>,
+        I: IntoIterator<Item = T>,
+    {
+        self.binary(
+            BinaryOp::In,
+            Expr::Tuple(
+                tuples
+                    .into_iter()
+                    .map(|t| Expr::Tuple(t.into_iter().collect()))
+                    .collect(),
+            ),
+        )
+    }
+
     /// Apply any unary operator to the expression.
     pub fn unary(self, op: UnaryOp) -> Expr {
         Expr::Unary(op, Box::new(self))
@@ -411,6 +439,7 @@ pub(crate) fn write_expr<W: SqlWriter>(w: &mut W, expr: &Expr) {
             write_select(w, query);
             w.push_char(')');
         }
+        Expr::Custom(expr) => w.push_str(expr),
     }
 }
 

@@ -25,6 +25,7 @@ use crate::types::write_iden;
 use crate::types::write_table_ref;
 use crate::value::write_value;
 use crate::writer::SqlWriter;
+use crate::writer::SqlWriterValues;
 
 /// Select rows from an existing table.
 #[derive(Default, Debug, Clone, PartialEq)]
@@ -56,6 +57,25 @@ pub struct OrderExpr {
 }
 
 impl Select {
+    /// Create a new select statement.
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Build the SQL string with placeholders and return collected values.
+    pub fn to_values(&self) -> SqlWriterValues {
+        let mut w = SqlWriterValues::new();
+        write_select(&mut w, self);
+        w
+    }
+
+    /// Convert the select statement to a PostgreSQL query string.
+    pub fn to_sql(&self) -> String {
+        let mut sql = String::new();
+        write_select(&mut sql, self);
+        sql
+    }
+
     /// From table.
     pub fn from<R>(mut self, table: R) -> Self
     where
@@ -255,20 +275,6 @@ impl Select {
     pub fn limit(mut self, limit: u64) -> Self {
         self.limit = Some(limit);
         self
-    }
-
-    /// Convert the select statement to a PostgreSQL query string.
-    pub fn to_sql(&self) -> String {
-        let mut sql = String::new();
-        write_select(&mut sql, self);
-        sql
-    }
-}
-
-impl Select {
-    /// Create a new select statement.
-    pub fn new() -> Self {
-        Self::default()
     }
 }
 
