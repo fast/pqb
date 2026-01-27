@@ -15,10 +15,9 @@
 use insta::assert_compact_debug_snapshot;
 use insta::assert_snapshot;
 use pqb::expr::Expr;
+use pqb::order::Order;
 use pqb::query::Select;
 use pqb::types::Asterisk;
-use pqb::types::NullOrdering;
-use pqb::types::Order;
 
 #[test]
 fn select_0() {
@@ -181,8 +180,10 @@ fn select_11() {
             .column("aspect")
             .from("glyph")
             .and_where(Expr::column("aspect").if_null(0).gt(2))
-            .order_by("image", Order::Desc)
-            .order_by(("glyph", "aspect"), Order::Asc)
+            .order_by([
+                Order::column("image").desc(),
+                Order::column(("glyph", "aspect")).asc()
+            ])
             .to_sql(),
         @r#"SELECT "aspect" FROM "glyph" WHERE COALESCE("aspect", 0) > 2 ORDER BY "image" DESC, "glyph"."aspect" ASC"#
     );
@@ -195,7 +196,7 @@ fn select_12() {
             .column("aspect")
             .from("glyph")
             .and_where(Expr::column("aspect").if_null(0).gt(2))
-            .order_by_columns([("id", Order::Asc), ("aspect", Order::Desc)])
+            .order_by([Order::column("id"), Order::column("aspect").desc()])
             .to_sql(),
         @r#"SELECT "aspect" FROM "glyph" WHERE COALESCE("aspect", 0) > 2 ORDER BY "id" ASC, "aspect" DESC"#
     );
@@ -208,9 +209,9 @@ fn select_13() {
             .column("aspect")
             .from("glyph")
             .and_where(Expr::column("aspect").if_null(0).gt(2))
-            .order_by_columns([
-                (("glyph", "id"), Order::Asc),
-                (("glyph", "aspect"), Order::Desc),
+            .order_by([
+                Order::column(("glyph", "id")),
+                Order::column(("glyph", "aspect")).desc(),
             ])
             .to_sql(),
         @r#"SELECT "aspect" FROM "glyph" WHERE COALESCE("aspect", 0) > 2 ORDER BY "glyph"."id" ASC, "glyph"."aspect" DESC"#
@@ -758,8 +759,10 @@ fn select_51() {
             .column("aspect")
             .from("glyph")
             .and_where(Expr::column("aspect").if_null(0).gt(2))
-            .order_by_with_nulls("image", Order::Desc, NullOrdering::First)
-            .order_by_with_nulls(("glyph", "aspect"), Order::Asc, NullOrdering::Last)
+            .order_by([
+                Order::column("image").desc().nulls_first(),
+                Order::column(("glyph", "aspect")).asc().nulls_last()
+            ])
             .to_sql(),
         @r#"SELECT "aspect" FROM "glyph" WHERE COALESCE("aspect", 0) > 2 ORDER BY "image" DESC NULLS FIRST, "glyph"."aspect" ASC NULLS LAST"#
     );

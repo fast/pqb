@@ -14,13 +14,13 @@
 
 use crate::expr::Expr;
 use crate::expr::write_expr;
+use crate::order::Order;
+use crate::order::write_order;
 use crate::types::Iden;
 use crate::types::IntoColumnRef;
 use crate::types::IntoIden;
 use crate::types::IntoTableRef;
 use crate::types::JoinType;
-use crate::types::NullOrdering;
-use crate::types::Order;
 use crate::types::TableRef;
 use crate::types::write_iden;
 use crate::types::write_table_ref;
@@ -37,7 +37,7 @@ pub struct Select {
     conditions: Vec<Expr>,
     groups: Vec<Expr>,
     having: Vec<Expr>,
-    orders: Vec<OrderExpr>,
+    orders: Vec<Order>,
     limit: Option<u64>,
     offset: Option<u64>,
 }
@@ -48,14 +48,6 @@ pub struct JoinExpr {
     join_type: JoinType,
     table: TableRef,
     on: Option<Expr>,
-}
-
-/// Order expression.
-#[derive(Debug, Clone, PartialEq)]
-pub struct OrderExpr {
-    expr: Expr,
-    order: Order,
-    nulls: Option<NullOrdering>,
 }
 
 impl Select {
@@ -207,44 +199,13 @@ impl Select {
         self
     }
 
-    /// Order by column.
-    pub fn order_by<C>(mut self, col: C, order: Order) -> Self
+    /// Order by expressions.
+    pub fn order_by<I>(mut self, orders: I) -> Self
     where
-        C: IntoColumnRef,
+        I: IntoIterator<Item = Order>,
     {
-        self.orders.push(OrderExpr {
-            expr: Expr::Column(col.into_column_ref()),
-            order,
-            nulls: None,
-        });
-        self
-    }
-
-    /// Order by column with NULLS FIRST/LAST.
-    pub fn order_by_with_nulls<C>(mut self, col: C, order: Order, nulls: NullOrdering) -> Self
-    where
-        C: IntoColumnRef,
-    {
-        self.orders.push(OrderExpr {
-            expr: Expr::Column(col.into_column_ref()),
-            order,
-            nulls: Some(nulls),
-        });
-        self
-    }
-
-    /// Order by multiple columns.
-    pub fn order_by_columns<T, I>(mut self, cols: I) -> Self
-    where
-        T: IntoColumnRef,
-        I: IntoIterator<Item = (T, Order)>,
-    {
-        for (col, order) in cols {
-            self.orders.push(OrderExpr {
-                expr: Expr::Column(col.into_column_ref()),
-                order,
-                nulls: None,
-            });
+        for order in orders {
+            self.orders.push(order);
         }
         self
     }
@@ -371,17 +332,7 @@ pub(crate) fn write_select<W: SqlWriter>(w: &mut W, select: &Select) {
             if i > 0 {
                 w.push_str(", ");
             }
-            write_expr(w, &order.expr);
-            match order.order {
-                Order::Asc => w.push_str(" ASC"),
-                Order::Desc => w.push_str(" DESC"),
-            }
-            if let Some(nulls) = order.nulls {
-                match nulls {
-                    NullOrdering::First => w.push_str(" NULLS FIRST"),
-                    NullOrdering::Last => w.push_str(" NULLS LAST"),
-                }
-            }
+            write_order(w, order);
         }
     }
 

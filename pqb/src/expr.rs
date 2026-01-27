@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//! Building blocks of SQL statements.
+//! SQL expressions.
 //!
 //! [`Expr`] is an arbitrary, dynamically-typed SQL expression. It can be used in select fields,
 //! where clauses and many other places.
@@ -68,11 +68,11 @@ impl Expr {
     }
 
     /// Express the target column, returning a [`Expr`].
-    pub fn column<T>(n: T) -> Self
+    pub fn column<T>(col: T) -> Self
     where
         T: IntoColumnRef,
     {
-        Expr::Column(n.into_column_ref())
+        Expr::Column(col.into_column_ref())
     }
 
     /// Express the asterisk (*) without table prefix.
@@ -81,11 +81,11 @@ impl Expr {
     }
 
     /// Wraps tuple of `Expr`, can be used for tuple comparison.
-    pub fn tuple<I>(n: I) -> Self
+    pub fn tuple<I>(exprs: I) -> Self
     where
         I: IntoIterator<Item = Self>,
     {
-        Expr::Tuple(n.into_iter().collect())
+        Expr::Tuple(exprs.into_iter().collect())
     }
 
     /// Express a custom SQL expression.
