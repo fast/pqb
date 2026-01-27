@@ -16,6 +16,7 @@ use insta::assert_compact_debug_snapshot;
 use insta::assert_snapshot;
 use pqb::expr::Expr;
 use pqb::query::Select;
+use pqb::types::Asterisk;
 use pqb::types::Order;
 
 #[test]
@@ -733,5 +734,18 @@ fn select_49() {
             .from("character")
             .to_sql(),
         @r#"SELECT * FROM "character""#
+    );
+}
+
+#[test]
+fn select_50() {
+    assert_snapshot!(
+        Select::new()
+            .column(("character", Asterisk))
+            .column(("font", "name"))
+            .from("character")
+            .inner_join("font", Expr::column(("character", "font_id")).eq(Expr::column(("font", "id"))))
+            .to_sql(),
+        @r#"SELECT "character".*, "font"."name" FROM "character" INNER JOIN "font" ON "character"."font_id" = "font"."id""#
     );
 }
