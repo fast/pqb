@@ -29,7 +29,6 @@ use crate::types::IntoColumnRef;
 use crate::types::write_iden;
 use crate::types::write_table_name;
 use crate::value::Value;
-use crate::value::write_value;
 use crate::writer::SqlWriter;
 
 /// SQL keywords.
@@ -397,6 +396,12 @@ impl Expr {
     }
 }
 
+impl From<Keyword> for Expr {
+    fn from(k: Keyword) -> Self {
+        Expr::Keyword(k)
+    }
+}
+
 impl<T> From<T> for Expr
 where
     T: Into<Value>,
@@ -412,7 +417,7 @@ pub(crate) fn write_expr<W: SqlWriter>(w: &mut W, expr: &Expr) {
         Expr::Asterisk => w.push_char('*'),
         Expr::Keyword(Keyword::Null) => w.push_str("NULL"),
         Expr::Tuple(exprs) => write_tuple(w, exprs),
-        Expr::Value(value) => write_value(w, value.clone()),
+        Expr::Value(value) => w.push_param(value.clone()),
         Expr::Unary(unary, expr) => write_unary_expr(w, unary, expr),
         Expr::Binary(lhs, op, rhs) => match (op, &**rhs) {
             (BinaryOp::In, Expr::Tuple(t)) if t.is_empty() => {

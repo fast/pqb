@@ -24,6 +24,7 @@ use crate::types::JoinType;
 use crate::types::TableRef;
 use crate::types::write_iden;
 use crate::types::write_table_ref;
+use crate::value::Value;
 use crate::value::write_value;
 use crate::writer::SqlWriter;
 use crate::writer::SqlWriterValues;
@@ -338,12 +339,12 @@ pub(crate) fn write_select<W: SqlWriter>(w: &mut W, select: &Select) {
 
     if let Some(limit) = select.limit {
         w.push_str(" LIMIT ");
-        write_value(w, limit.into());
+        write_value(w, &Value::from(limit));
     }
 
     if let Some(offset) = select.offset {
         w.push_str(" OFFSET ");
-        write_value(w, offset.into());
+        write_value(w, &Value::from(offset));
     }
 }
 
