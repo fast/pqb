@@ -41,6 +41,7 @@ pub struct Select {
     orders: Vec<Order>,
     limit: Option<u64>,
     offset: Option<u64>,
+    lock: Option<RowLevelLock>,
 }
 
 /// Join expression.
@@ -255,6 +256,12 @@ impl Select {
         self.limit = Some(limit);
         self
     }
+
+    /// Apply row-level lock.
+    pub fn lock(mut self, lock: RowLevelLock) -> Self {
+        self.lock = Some(lock);
+        self
+    }
 }
 
 impl Select {
@@ -280,6 +287,90 @@ where
             alias: None,
         }
     }
+}
+
+/// Row-level lock clause for select statements.
+#[derive(Debug, Clone, PartialEq)]
+pub struct RowLevelLock {
+    ty: RowLevelLockType,
+    tables: Vec<Iden>,
+    behavior: Option<RowLevelLockBehavior>,
+}
+
+impl RowLevelLock {
+    /// Create a new row-level lock for update.
+    pub fn for_update() -> Self {
+        Self {
+            ty: RowLevelLockType::ForUpdate,
+            tables: vec![],
+            behavior: None,
+        }
+    }
+
+    /// Create a new row-level lock for no key update.
+    pub fn for_no_key_update() -> Self {
+        Self {
+            ty: RowLevelLockType::ForNoKeyUpdate,
+            tables: vec![],
+            behavior: None,
+        }
+    }
+
+    /// Create a new row-level lock for share.
+    pub fn for_share() -> Self {
+        Self {
+            ty: RowLevelLockType::ForShare,
+            tables: vec![],
+            behavior: None,
+        }
+    }
+
+    /// Create a new row-level lock for key share.
+    pub fn for_key_share() -> Self {
+        Self {
+            ty: RowLevelLockType::ForKeyShare,
+            tables: vec![],
+            behavior: None,
+        }
+    }
+
+    /// Specify the lock behavior as NO WAIT.
+    pub fn no_wait(mut self) -> Self {
+        self.behavior = Some(RowLevelLockBehavior::Nowait);
+        self
+    }
+
+    /// Specify the lock behavior as SKIP LOCKED.
+    pub fn skip_locked(mut self) -> Self {
+        self.behavior = Some(RowLevelLockBehavior::SkipLocked);
+        self
+    }
+
+    /// Specify tables to apply the row-level lock.
+    pub fn tables<T, I>(mut self, tables: I) -> Self
+    where
+        T: IntoIden,
+        I: IntoIterator<Item = T>,
+    {
+        self.tables = tables.into_iter().map(|t| t.into_iden()).collect();
+        self
+    }
+}
+
+/// Types of row-level locks.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum RowLevelLockType {
+    ForUpdate,
+    ForNoKeyUpdate,
+    ForShare,
+    ForKeyShare,
+}
+
+/// Behavior of row-level locks.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum RowLevelLockBehavior {
+    Nowait,
+    SkipLocked,
 }
 
 pub(crate) fn write_select<W: SqlWriter>(w: &mut W, select: &Select) {
@@ -352,6 +443,10 @@ pub(crate) fn write_select<W: SqlWriter>(w: &mut W, select: &Select) {
         w.push_str(" OFFSET ");
         write_value(w, &Value::from(offset));
     }
+
+    if let Some(lock) = &select.lock {
+        write_row_level_lock(w, lock);
+    }
 }
 
 fn write_select_expr<W: SqlWriter>(w: &mut W, select_expr: &SelectExpr) {
@@ -359,5 +454,31 @@ fn write_select_expr<W: SqlWriter>(w: &mut W, select_expr: &SelectExpr) {
     if let Some(alias) = &select_expr.alias {
         w.push_str(" AS ");
         write_iden(w, alias);
+    }
+}
+
+fn write_row_level_lock<W: SqlWriter>(w: &mut W, lock: &RowLevelLock) {
+    match lock.ty {
+        RowLevelLockType::ForUpdate => w.push_str(" FOR UPDATE"),
+        RowLevelLockType::ForNoKeyUpdate => w.push_str(" FOR NO KEY UPDATE"),
+        RowLevelLockType::ForShare => w.push_str(" FOR SHARE"),
+        RowLevelLockType::ForKeyShare => w.push_str(" FOR KEY SHARE"),
+    }
+
+    if !lock.tables.is_empty() {
+        w.push_str(" OF ");
+        for (i, table) in lock.tables.iter().enumerate() {
+            if i > 0 {
+                w.push_str(", ");
+            }
+            write_iden(w, table);
+        }
+    }
+
+    if let Some(behavior) = &lock.behavior {
+        match behavior {
+            RowLevelLockBehavior::Nowait => w.push_str(" NOWAIT"),
+            RowLevelLockBehavior::SkipLocked => w.push_str(" SKIP LOCKED"),
+        }
     }
 }

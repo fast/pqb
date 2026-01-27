@@ -2,5 +2,4 @@
 
 # temporary files
 .DS_Store
-AGENTS.md
 *.pending-snap
