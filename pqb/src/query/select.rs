@@ -257,6 +257,12 @@ impl Select {
     }
 }
 
+impl Select {
+    pub(crate) const fn columns_len(&self) -> usize {
+        self.selects.len()
+    }
+}
+
 /// Select expression used in select statement.
 #[derive(Debug, Clone, PartialEq)]
 pub struct SelectExpr {

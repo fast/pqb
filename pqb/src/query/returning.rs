@@ -13,7 +13,9 @@
 // limitations under the License.
 
 use crate::expr::Expr;
+use crate::expr::write_expr;
 use crate::types::IntoColumnRef;
+use crate::writer::SqlWriter;
 
 /// RETURNING clause.
 #[derive(Clone, Debug, PartialEq)]
@@ -46,5 +48,20 @@ impl Returning {
         T: Into<Expr>,
     {
         Self::Exprs(exprs.into_iter().map(Into::into).collect())
+    }
+}
+
+pub(crate) fn write_returning<W: SqlWriter>(w: &mut W, returning: &Returning) {
+    w.push_str(" RETURNING ");
+    match returning {
+        Returning::All => w.push_char('*'),
+        Returning::Exprs(exprs) => {
+            for (i, expr) in exprs.iter().enumerate() {
+                if i > 0 {
+                    w.push_str(", ");
+                }
+                write_expr(w, expr);
+            }
+        }
     }
 }
