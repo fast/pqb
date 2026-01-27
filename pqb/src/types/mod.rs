@@ -234,15 +234,6 @@ pub enum JoinType {
     InnerJoin,
 }
 
-/// Sort order.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-#[non_exhaustive]
-#[expect(missing_docs)]
-pub enum Order {
-    Asc,
-    Desc,
-}
-
 pub(crate) fn write_iden<W: SqlWriter>(w: &mut W, iden: &Iden) {
     // PostgreSQL uses double quotes for quoting identifiers.
     // @see https://www.postgresql.org/docs/18/sql-syntax-lexical.html#SQL-SYNTAX-IDENTIFIERS

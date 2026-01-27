@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//! Query statements.
+//! SQL query statements.
 
 mod select;
 pub use self::select::*;
