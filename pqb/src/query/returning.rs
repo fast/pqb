@@ -13,7 +13,7 @@
 // limitations under the License.
 
 use crate::expr::Expr;
-use crate::types::ColumnRef;
+use crate::types::IntoColumnRef;
 
 /// RETURNING clause.
 #[derive(Clone, Debug, PartialEq)]
@@ -34,13 +34,9 @@ impl Returning {
     pub fn columns<T, I>(cols: I) -> Self
     where
         I: IntoIterator<Item = T>,
-        T: Into<ColumnRef>,
+        T: IntoColumnRef,
     {
-        Self::Exprs(
-            cols.into_iter()
-                .map(|col| Expr::Column(col.into()))
-                .collect(),
-        )
+        Self::Exprs(cols.into_iter().map(Expr::column).collect())
     }
 
     /// Create a RETURNING clause with specific expressions.
@@ -49,6 +45,6 @@ impl Returning {
         I: IntoIterator<Item = T>,
         T: Into<Expr>,
     {
-        Self::Exprs(exprs.into_iter().map(|e| e.into()).collect())
+        Self::Exprs(exprs.into_iter().map(Into::into).collect())
     }
 }

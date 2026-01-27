@@ -90,6 +90,12 @@ impl From<String> for Iden {
     }
 }
 
+impl From<Cow<'static, str>> for Iden {
+    fn from(name: Cow<'static, str>) -> Self {
+        Iden::new(name)
+    }
+}
+
 /// A trait for types that can be converted into an identifier.
 pub trait IntoIden {
     /// Convert into an identifier.

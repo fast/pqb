@@ -12,5 +12,50 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use crate::expr::Expr;
+use crate::query::Returning;
+use crate::types::{Iden, IntoIden, IntoTableRef, TableRef};
+
 /// Insert any new rows into an existing table
-pub struct Insert {}
+#[derive(Debug, Default, Clone, PartialEq)]
+pub struct Insert {
+    table: Option<TableRef>,
+    columns: Vec<Iden>,
+    returning: Option<Returning>,
+}
+
+impl Insert {
+    /// Create a new INSERT statement.
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Specify which table to insert into.
+    pub fn into_table<T>(mut self, table: T) -> Self
+    where
+        T: IntoTableRef,
+    {
+        self.table = Some(table.into());
+        self
+    }
+
+    /// Specify what columns to insert.
+    pub fn columns<T, I>(mut self, cols: I) -> Self
+    where
+        I: IntoIterator<Item = T>,
+        T: IntoIden,
+    {
+        for col in cols {
+            self.columns.push(col.into_iden());
+        }
+        self
+    }
+
+    /// Specify a row of values to be inserted.
+    pub fn values<I>(mut self, values: I) -> Self
+    where
+        I: IntoIterator<Item = Expr>,
+    {
+        self
+    }
+}

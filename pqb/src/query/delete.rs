@@ -12,5 +12,70 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use crate::SqlWriterValues;
+use crate::expr::Expr;
+use crate::expr::write_expr;
+use crate::types::IntoTableRef;
+use crate::types::TableRef;
+use crate::types::write_table_ref;
+use crate::writer::SqlWriter;
+
 /// Delete existing rows from the table
-pub struct Delete {}
+#[derive(Default, Debug, Clone, PartialEq)]
+pub struct Delete {
+    table: Option<TableRef>,
+    conditions: Vec<Expr>,
+}
+
+impl Delete {
+    /// Create a new DELETE query.
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Build the SQL string with placeholders and return collected values.
+    pub fn to_values(&self) -> SqlWriterValues {
+        let mut w = SqlWriterValues::new();
+        write_delete(&mut w, self);
+        w
+    }
+
+    /// Convert the select statement to a PostgreSQL query string.
+    pub fn to_sql(&self) -> String {
+        let mut sql = String::new();
+        write_delete(&mut sql, self);
+        sql
+    }
+
+    /// Specify which table to delete from.
+    pub fn from_table<T>(mut self, table: T) -> Self
+    where
+        T: IntoTableRef,
+    {
+        self.table = Some(table.into());
+        self
+    }
+
+    /// And where condition.
+    pub fn and_where<T>(mut self, expr: T) -> Self
+    where
+        T: Into<Expr>,
+    {
+        self.conditions.push(expr.into());
+        self
+    }
+}
+
+fn write_delete<W: SqlWriter>(w: &mut W, delete: &Delete) {
+    w.push_str("DELETE ");
+
+    if let Some(table) = &delete.table {
+        w.push_str("FROM ");
+        write_table_ref(w, table);
+    }
+
+    if let Some(condition) = Expr::from_conditions(delete.conditions.clone()) {
+        w.push_str(" WHERE ");
+        write_expr(w, &condition);
+    }
+}
