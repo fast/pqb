@@ -46,6 +46,16 @@ impl Iden {
         let escaped = is_escaped_iden(&name);
         Self { name, escaped }
     }
+
+    /// Whether this identifier is escaped, i.e., does not need further escaping when rendered.
+    pub fn is_escaped(&self) -> bool {
+        self.escaped
+    }
+
+    /// Consume this identifier and return the inner string.
+    pub fn into_inner(self) -> Cow<'static, str> {
+        self.name
+    }
 }
 
 /// Return whether this identifier needs to be escaped.
