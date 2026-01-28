@@ -14,6 +14,11 @@
 
 //! Container for all SQL value types.
 
+#[cfg(feature = "with-json")]
+pub use serde_json::Value as Json;
+#[cfg(feature = "with-uuid")]
+pub use uuid::Uuid;
+
 use crate::writer::SqlWriter;
 
 /// SQL value variants.
@@ -32,6 +37,22 @@ pub enum Value {
     Float(Option<f32>),
     Double(Option<f64>),
     String(Option<String>),
+    Array(Option<Vec<Value>>),
+    #[cfg(feature = "with-json")]
+    Json(Option<Box<Json>>),
+    #[cfg(feature = "with-uuid")]
+    Uuid(Option<Uuid>),
+}
+
+impl Value {
+    /// Create a new array value.
+    pub fn array<T, I>(values: I) -> Value
+    where
+        T: Into<Value>,
+        I: IntoIterator<Item = T>,
+    {
+        Value::Array(Some(values.into_iter().map(|e| e.into()).collect()))
+    }
 }
 
 macro_rules! type_to_value {
@@ -62,6 +83,28 @@ type_to_value!(u64, BigUnsigned);
 type_to_value!(f32, Float);
 type_to_value!(f64, Double);
 type_to_value!(String, String);
+#[cfg(feature = "with-uuid")]
+type_to_value!(Uuid, Uuid);
+
+#[allow(unused_macros)]
+macro_rules! type_to_box_value {
+    ( $type: ty, $name: ident, $col_type: expr ) => {
+        impl From<$type> for Value {
+            fn from(x: $type) -> Value {
+                Value::$name(Some(Box::new(x)))
+            }
+        }
+
+        impl Nullable for $type {
+            fn null() -> Value {
+                Value::$name(None)
+            }
+        }
+    };
+}
+
+#[cfg(feature = "with-json")]
+type_to_box_value!(Json, Json, Json);
 
 impl From<&str> for Value {
     fn from(x: &str) -> Value {
@@ -97,21 +140,81 @@ impl Nullable for &str {
     }
 }
 
-pub(crate) fn write_value<W: SqlWriter>(w: &mut W, value: Value) {
-    w.push_param(value);
+pub(crate) fn write_value<W: SqlWriter>(w: &mut W, value: &Value) {
+    match value {
+        Value::Bool(None)
+        | Value::TinyInt(None)
+        | Value::SmallInt(None)
+        | Value::Int(None)
+        | Value::BigInt(None)
+        | Value::TinyUnsigned(None)
+        | Value::SmallUnsigned(None)
+        | Value::Unsigned(None)
+        | Value::BigUnsigned(None)
+        | Value::Float(None)
+        | Value::Double(None)
+        | Value::String(None)
+        | Value::Array(None) => w.push_str("NULL"),
+        #[cfg(feature = "with-json")]
+        Value::Json(None) => w.push_str("NULL"),
+        #[cfg(feature = "with-uuid")]
+        Value::Uuid(None) => w.push_str("NULL"),
+
+        Value::Bool(Some(b)) => w.push_str(if *b { "TRUE" } else { "FALSE" }),
+        Value::TinyInt(Some(i)) => w.push_fmt(format_args!("{i}")),
+        Value::SmallInt(Some(i)) => w.push_fmt(format_args!("{i}")),
+        Value::Int(Some(i)) => w.push_fmt(format_args!("{i}")),
+        Value::BigInt(Some(i)) => w.push_fmt(format_args!("{i}")),
+        Value::TinyUnsigned(Some(u)) => w.push_fmt(format_args!("{u}")),
+        Value::SmallUnsigned(Some(u)) => w.push_fmt(format_args!("{u}")),
+        Value::Unsigned(Some(u)) => w.push_fmt(format_args!("{u}")),
+        Value::BigUnsigned(Some(u)) => w.push_fmt(format_args!("{u}")),
+        Value::Float(Some(f)) => w.push_fmt(format_args!("{f}")),
+        Value::Double(Some(f)) => w.push_fmt(format_args!("{f}")),
+        Value::String(Some(s)) => write_string_value(w, s.as_str()),
+        Value::Array(Some(a)) => write_array_value(w, a.as_slice()),
+        #[cfg(feature = "with-json")]
+        Value::Json(Some(v)) => {
+            let value = v.to_string();
+            write_string_value(w, &value);
+        }
+        #[cfg(feature = "with-uuid")]
+        Value::Uuid(Some(u)) => w.push_fmt(format_args!("'{u}'")),
+    }
 }
 
-pub(crate) fn write_string_value<W: SqlWriter>(w: &mut W, value: &str) {
+fn write_array_value<W: SqlWriter>(w: &mut W, values: &[Value]) {
+    if values.is_empty() {
+        w.push_str("'{}'");
+    } else {
+        w.push_str("ARRAY [");
+
+        let mut it = values.iter();
+
+        if let Some(element) = it.next() {
+            write_value(w, element);
+        }
+
+        for element in it {
+            w.push_str(",");
+            write_value(w, element);
+        }
+        w.push_str("]");
+    }
+}
+
+fn write_string_value<W: SqlWriter>(w: &mut W, value: &str) {
     if should_escape(value) {
-        w.push_str("E'");
+        write_string_escaped(w, value)
     } else {
         w.push_str("'");
+        w.push_str(value);
+        w.push_str("'");
     }
-    write_escaped_string(w, value);
-    w.push_str("'");
 }
 
-fn write_escaped_string<W: SqlWriter>(w: &mut W, value: &str) {
+fn write_string_escaped<W: SqlWriter>(w: &mut W, value: &str) {
+    w.push_str("E'");
     for c in value.chars() {
         match c {
             '\x08' => w.push_str(r"\b"),
@@ -129,6 +232,7 @@ fn write_escaped_string<W: SqlWriter>(w: &mut W, value: &str) {
             c => w.push_char(c),
         }
     }
+    w.push_str("'");
 }
 
 fn should_escape(s: &str) -> bool {

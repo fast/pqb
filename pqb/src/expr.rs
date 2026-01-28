@@ -26,10 +26,10 @@ use crate::query::write_select;
 use crate::types::ColumnName;
 use crate::types::ColumnRef;
 use crate::types::IntoColumnRef;
+use crate::types::IntoIden;
 use crate::types::write_iden;
 use crate::types::write_table_name;
 use crate::value::Value;
-use crate::value::write_value;
 use crate::writer::SqlWriter;
 
 /// SQL keywords.
@@ -38,6 +38,7 @@ use crate::writer::SqlWriter;
 #[expect(missing_docs)]
 pub enum Keyword {
     Null,
+    CurrentTimestamp,
 }
 
 /// An arbitrary, dynamically-typed SQL expression.
@@ -94,6 +95,11 @@ impl Expr {
         T: Into<Cow<'static, str>>,
     {
         Expr::Custom(expr.into())
+    }
+
+    /// Keyword `CURRENT_TIMESTAMP`.
+    pub fn current_timestamp() -> Self {
+        Expr::Keyword(Keyword::CurrentTimestamp)
     }
 }
 
@@ -282,6 +288,22 @@ impl Expr {
         self.binary(BinaryOp::NotEqual, right)
     }
 
+    /// Express a `IS` expression.
+    pub fn is<R>(self, right: R) -> Expr
+    where
+        R: Into<Expr>,
+    {
+        self.binary(BinaryOp::Is, right)
+    }
+
+    /// Express a `IS NOT` expression.
+    pub fn is_not<R>(self, right: R) -> Expr
+    where
+        R: Into<Expr>,
+    {
+        self.binary(BinaryOp::IsNot, right)
+    }
+
     /// Express a `IN` expression.
     pub fn is_in<V, I>(self, v: I) -> Expr
     where
@@ -338,6 +360,14 @@ impl Expr {
     pub fn not(self) -> Expr {
         self.unary(UnaryOp::Not)
     }
+
+    /// Call `CAST` function with a custom type.
+    pub fn cast_as<N>(self, ty: N) -> Expr
+    where
+        N: IntoIden,
+    {
+        Expr::FunctionCall(FunctionCall::cast_as(self, ty))
+    }
 }
 
 /// SubQuery operators
@@ -366,6 +396,7 @@ pub enum UnaryOp {
 pub enum BinaryOp {
     And,
     Or,
+    As,
     Equal,
     NotEqual,
     Between,
@@ -397,6 +428,12 @@ impl Expr {
     }
 }
 
+impl From<Keyword> for Expr {
+    fn from(k: Keyword) -> Self {
+        Expr::Keyword(k)
+    }
+}
+
 impl<T> From<T> for Expr
 where
     T: Into<Value>,
@@ -410,9 +447,12 @@ pub(crate) fn write_expr<W: SqlWriter>(w: &mut W, expr: &Expr) {
     match expr {
         Expr::Column(col) => write_column_ref(w, col),
         Expr::Asterisk => w.push_char('*'),
-        Expr::Keyword(Keyword::Null) => w.push_str("NULL"),
+        Expr::Keyword(keyword) => w.push_str(match keyword {
+            Keyword::Null => "NULL",
+            Keyword::CurrentTimestamp => "CURRENT_TIMESTAMP",
+        }),
         Expr::Tuple(exprs) => write_tuple(w, exprs),
-        Expr::Value(value) => write_value(w, value.clone()),
+        Expr::Value(value) => w.push_param(value.clone()),
         Expr::Unary(unary, expr) => write_unary_expr(w, unary, expr),
         Expr::Binary(lhs, op, rhs) => match (op, &**rhs) {
             (BinaryOp::In, Expr::Tuple(t)) if t.is_empty() => {
@@ -501,6 +541,10 @@ fn write_binary_expr<W: SqlWriter>(w: &mut W, lhs: &Expr, op: &BinaryOp, rhs: &E
     {
         right_paren = false;
     }
+    // workaround custom representation of casting AS datatype
+    if right_paren && (op == &BinaryOp::As) && matches!(rhs, Expr::Custom(_)) {
+        right_paren = false;
+    }
     if right_paren {
         w.push_char('(');
     }
@@ -514,6 +558,7 @@ fn write_binary_op<W: SqlWriter>(w: &mut W, op: &BinaryOp) {
     w.push_str(match op {
         BinaryOp::And => "AND",
         BinaryOp::Or => "OR",
+        BinaryOp::As => "AS",
         BinaryOp::Like => "LIKE",
         BinaryOp::NotLike => "NOT LIKE",
         BinaryOp::Is => "IS",

@@ -27,7 +27,15 @@ readme.workspace = true
 repository.workspace = true
 rust-version.workspace = true
 
+[features]
+with-json = ["dep:serde_json"]
+with-uuid = ["dep:uuid"]
+
 [dependencies]
+serde_json = { version = "1", default-features = false, optional = true, features = [
+  "std",
+] }
+uuid = { version = "1", default-features = false, optional = true }
 
 [dev-dependencies]
 insta = { version = "1.46.1" }

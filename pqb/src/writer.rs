@@ -12,10 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use std::fmt::Arguments;
 use std::fmt::Write;
 
 use crate::value::Value;
-use crate::value::write_string_value;
+use crate::value::write_value;
 
 pub trait SqlWriter {
     fn push_param(&mut self, value: Value);
@@ -23,37 +24,13 @@ pub trait SqlWriter {
     fn push_str(&mut self, value: &str);
 
     fn push_char(&mut self, value: char);
+
+    fn push_fmt(&mut self, args: Arguments);
 }
 
 impl SqlWriter for String {
     fn push_param(&mut self, value: Value) {
-        match value {
-            Value::Bool(None)
-            | Value::TinyInt(None)
-            | Value::SmallInt(None)
-            | Value::Int(None)
-            | Value::BigInt(None)
-            | Value::TinyUnsigned(None)
-            | Value::SmallUnsigned(None)
-            | Value::Unsigned(None)
-            | Value::BigUnsigned(None)
-            | Value::Float(None)
-            | Value::Double(None)
-            | Value::String(None) => self.push_str("NULL"),
-
-            Value::Bool(Some(b)) => self.push_str(if b { "TRUE" } else { "FALSE" }),
-            Value::TinyInt(Some(i)) => write!(self, "{i}").unwrap(),
-            Value::SmallInt(Some(i)) => write!(self, "{i}").unwrap(),
-            Value::Int(Some(i)) => write!(self, "{i}").unwrap(),
-            Value::BigInt(Some(i)) => write!(self, "{i}").unwrap(),
-            Value::TinyUnsigned(Some(u)) => write!(self, "{u}").unwrap(),
-            Value::SmallUnsigned(Some(u)) => write!(self, "{u}").unwrap(),
-            Value::Unsigned(Some(u)) => write!(self, "{u}").unwrap(),
-            Value::BigUnsigned(Some(u)) => write!(self, "{u}").unwrap(),
-            Value::Float(Some(f)) => write!(self, "{f}").unwrap(),
-            Value::Double(Some(f)) => write!(self, "{f}").unwrap(),
-            Value::String(Some(s)) => write_string_value(self, s.as_str()),
-        }
+        write_value(self, &value);
     }
 
     fn push_str(&mut self, value: &str) {
@@ -62,6 +39,10 @@ impl SqlWriter for String {
 
     fn push_char(&mut self, value: char) {
         String::push(self, value)
+    }
+
+    fn push_fmt(&mut self, args: Arguments) {
+        self.write_fmt(args).unwrap();
     }
 }
 
@@ -107,5 +88,9 @@ impl SqlWriter for SqlWriterValues {
 
     fn push_char(&mut self, value: char) {
         self.sql.push(value);
+    }
+
+    fn push_fmt(&mut self, args: Arguments) {
+        self.sql.write_fmt(args).unwrap();
     }
 }

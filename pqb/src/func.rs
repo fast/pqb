@@ -14,22 +14,24 @@
 
 //! SQL built-in functions.
 
+use crate::expr::BinaryOp;
 use crate::expr::Expr;
 use crate::expr::write_expr;
 use crate::types::IntoColumnRef;
+use crate::types::IntoIden;
 use crate::writer::SqlWriter;
 
-/// SQL built-in functions.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-#[non_exhaustive]
-#[expect(missing_docs)]
-pub enum Func {
+enum Func {
     Max,
     Min,
     Sum,
     Avg,
+    Cast,
     Count,
     Coalesce,
+    Lower,
+    Upper,
 }
 
 /// A function call expression.
@@ -114,6 +116,41 @@ impl FunctionCall {
             args: vec![a.into(), b.into()],
         }
     }
+
+    /// Create an LOWER function call.
+    pub fn lower<T>(expr: T) -> FunctionCall
+    where
+        T: Into<Expr>,
+    {
+        FunctionCall {
+            func: Func::Lower,
+            args: vec![expr.into()],
+        }
+    }
+
+    /// Create an UPPER function call.
+    pub fn upper<T>(expr: T) -> FunctionCall
+    where
+        T: Into<Expr>,
+    {
+        FunctionCall {
+            func: Func::Upper,
+            args: vec![expr.into()],
+        }
+    }
+
+    /// Call `CAST` function with a custom type.
+    pub fn cast_as<V, I>(expr: V, iden: I) -> FunctionCall
+    where
+        V: Into<Expr>,
+        I: IntoIden,
+    {
+        let expr = expr.into();
+        FunctionCall {
+            func: Func::Cast,
+            args: vec![expr.binary(BinaryOp::As, Expr::custom(iden.into_iden().into_inner()))],
+        }
+    }
 }
 
 impl From<FunctionCall> for Expr {
@@ -128,8 +165,11 @@ pub(crate) fn write_function_call<W: SqlWriter>(w: &mut W, call: &FunctionCall) 
         Func::Min => w.push_str("MIN"),
         Func::Sum => w.push_str("SUM"),
         Func::Avg => w.push_str("AVG"),
+        Func::Cast => w.push_str("CAST"),
         Func::Count => w.push_str("COUNT"),
         Func::Coalesce => w.push_str("COALESCE"),
+        Func::Lower => w.push_str("LOWER"),
+        Func::Upper => w.push_str("UPPER"),
     }
     w.push_char('(');
     for (i, arg) in call.args.iter().enumerate() {
