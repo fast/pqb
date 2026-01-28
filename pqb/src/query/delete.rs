@@ -84,7 +84,7 @@ impl Delete {
     }
 }
 
-fn write_delete<W: SqlWriter>(w: &mut W, delete: &Delete) {
+pub(crate) fn write_delete<W: SqlWriter>(w: &mut W, delete: &Delete) {
     if let Some(with) = &delete.with {
         write_with(w, with);
         w.push_char(' ');
