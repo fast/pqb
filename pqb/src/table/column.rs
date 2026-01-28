@@ -17,18 +17,15 @@ use std::sync::Arc;
 use crate::expr::Expr;
 use crate::expr::write_expr;
 use crate::types::Iden;
-use crate::types::TableRef;
 use crate::writer::SqlWriter;
 
 /// Specification of a table column.
 #[derive(Debug, Clone)]
 #[non_exhaustive]
-#[expect(missing_docs)]
 pub struct ColumnDef {
-    pub table: Option<TableRef>,
-    pub name: Iden,
-    pub ty: Option<ColumnType>,
-    pub spec: ColumnSpec,
+    pub(crate) name: Iden,
+    pub(crate) ty: Option<ColumnType>,
+    pub(crate) spec: ColumnSpec,
 }
 
 impl ColumnDef {
@@ -38,7 +35,6 @@ impl ColumnDef {
         N: Into<Iden>,
     {
         Self {
-            table: None,
             name: name.into(),
             ty: None,
             spec: ColumnSpec::default(),
@@ -63,14 +59,8 @@ impl ColumnDef {
         self
     }
 
-    /// Set column type as tiny_int
-    pub fn tiny_int(mut self) -> Self {
-        self.ty = Some(ColumnType::TinyInt);
-        self
-    }
-
-    /// Set column type as small_int
-    pub fn small_int(mut self) -> Self {
+    /// Set column type as smallint
+    pub fn smallint(mut self) -> Self {
         self.ty = Some(ColumnType::SmallInt);
         self
     }
@@ -81,33 +71,9 @@ impl ColumnDef {
         self
     }
 
-    /// Set column type as big_int
-    pub fn big_int(mut self) -> Self {
+    /// Set column type as bigint
+    pub fn bigint(mut self) -> Self {
         self.ty = Some(ColumnType::BigInt);
-        self
-    }
-
-    /// Set column type as tiny_unsigned
-    pub fn tiny_unsigned(mut self) -> Self {
-        self.ty = Some(ColumnType::TinyUnsigned);
-        self
-    }
-
-    /// Set column type as small_unsigned
-    pub fn small_unsigned(mut self) -> Self {
-        self.ty = Some(ColumnType::SmallUnsigned);
-        self
-    }
-
-    /// Set column type as unsigned
-    pub fn unsigned(mut self) -> Self {
-        self.ty = Some(ColumnType::Unsigned);
-        self
-    }
-
-    /// Set column type as big_unsigned
-    pub fn big_unsigned(mut self) -> Self {
-        self.ty = Some(ColumnType::BigUnsigned);
         self
     }
 
@@ -124,43 +90,43 @@ impl ColumnDef {
     }
 
     /// Set column type as timestamp
-    pub fn timestamp(&mut self) -> &mut Self {
+    pub fn timestamp(mut self) -> Self {
         self.ty = Some(ColumnType::Timestamp);
         self
     }
 
     /// Set column type as timestamp with time zone.
-    pub fn timestamp_with_time_zone(&mut self) -> &mut Self {
+    pub fn timestamp_with_time_zone(mut self) -> Self {
         self.ty = Some(ColumnType::TimestampWithTimeZone);
         self
     }
 
     /// Set column type as time
-    pub fn time(&mut self) -> &mut Self {
+    pub fn time(mut self) -> Self {
         self.ty = Some(ColumnType::Time);
         self
     }
 
     /// Set column type as date
-    pub fn date(&mut self) -> &mut Self {
+    pub fn date(mut self) -> Self {
         self.ty = Some(ColumnType::Date);
         self
     }
 
     /// Set column type as JSON.
-    pub fn json(&mut self) -> &mut Self {
+    pub fn json(mut self) -> Self {
         self.ty = Some(ColumnType::Json);
         self
     }
 
     /// Set column type as JSON binary.
-    pub fn json_binary(&mut self) -> &mut Self {
+    pub fn json_binary(mut self) -> Self {
         self.ty = Some(ColumnType::JsonBinary);
         self
     }
 
     /// Set column type as uuid
-    pub fn uuid(&mut self) -> &mut Self {
+    pub fn uuid(mut self) -> Self {
         self.ty = Some(ColumnType::Uuid);
         self
     }
@@ -172,14 +138,9 @@ impl ColumnDef {
 #[expect(missing_docs)]
 pub enum ColumnType {
     Text,
-    TinyInt,
     SmallInt,
     Int,
     BigInt,
-    TinyUnsigned,
-    SmallUnsigned,
-    Unsigned,
-    BigUnsigned,
     Float,
     Double,
     DateTime,
@@ -205,28 +166,12 @@ pub struct ColumnSpec {
     pub primary_key: bool,
 }
 
-/// Trait for converting into ColumnDef
-pub trait IntoColumnDef: Into<ColumnDef> {
-    /// Convert into a ColumnDef.
-    fn into_column_def(self) -> ColumnDef;
-}
-
-impl<T> IntoColumnDef for T
-where
-    T: Into<ColumnDef>,
-{
-    fn into_column_def(self) -> ColumnDef {
-        self.into()
-    }
-}
-
 pub(crate) fn write_column_type<W: SqlWriter>(w: &mut W, column_type: &ColumnType) {
     match column_type {
         ColumnType::Text => w.push_str("text"),
-        ColumnType::TinyInt | ColumnType::TinyUnsigned => w.push_str("smallint"),
-        ColumnType::SmallInt | ColumnType::SmallUnsigned => w.push_str("smallint"),
-        ColumnType::Int | ColumnType::Unsigned => w.push_str("integer"),
-        ColumnType::BigInt | ColumnType::BigUnsigned => w.push_str("bigint"),
+        ColumnType::SmallInt => w.push_str("smallint"),
+        ColumnType::Int => w.push_str("integer"),
+        ColumnType::BigInt => w.push_str("bigint"),
         ColumnType::Float => w.push_str("real"),
         ColumnType::Double => w.push_str("double precision"),
         ColumnType::DateTime => w.push_str("timestamp without time zone"),

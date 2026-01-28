@@ -15,7 +15,6 @@
 use crate::SqlWriterValues;
 use crate::expr::write_expr;
 use crate::table::ColumnDef;
-use crate::table::IntoColumnDef;
 use crate::table::write_column_spec;
 use crate::table::write_column_type;
 use crate::types::Iden;
@@ -63,25 +62,18 @@ impl AlterTable {
     }
 
     /// Add a column to an existing table
-    pub fn add_column<C>(mut self, column_def: C) -> Self
-    where
-        C: IntoColumnDef,
-    {
+    pub fn add_column(mut self, column: ColumnDef) -> Self {
         self.options
             .push(TableAlterOption::AddColumn(AddColumnOption {
-                column: column_def.into_column_def(),
+                column,
                 if_not_exists: false,
             }));
         self
     }
 
     /// Modify a column in an existing table
-    pub fn modify_column<C>(mut self, column_def: C) -> Self
-    where
-        C: IntoColumnDef,
-    {
-        self.options
-            .push(TableAlterOption::ModifyColumn(column_def.into_column_def()));
+    pub fn modify_column(mut self, column: ColumnDef) -> Self {
+        self.options.push(TableAlterOption::ModifyColumn(column));
         self
     }
 
