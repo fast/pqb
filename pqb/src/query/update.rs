@@ -130,7 +130,6 @@ fn write_update<W: SqlWriter>(w: &mut W, update: &Update) {
     }
 
     if let Some(returning) = &update.returning {
-        w.push_str(" RETURNING ");
         write_returning(w, returning);
     }
 }

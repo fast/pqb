@@ -126,14 +126,13 @@ pub(crate) fn write_with<W: crate::writer::SqlWriter>(w: &mut W, with: &With) {
             }
             w.push_str(") ");
         }
+        w.push_str("AS ");
         if let Some(materialized) = cte.materialized {
             if materialized {
-                w.push_str(" AS MATERIALIZED ");
+                w.push_str("MATERIALIZED ");
             } else {
-                w.push_str(" AS NOT MATERIALIZED ");
+                w.push_str("NOT MATERIALIZED ");
             }
-        } else {
-            w.push_str(" AS ");
         }
         match &cte.query {
             Query::Select(select) => {

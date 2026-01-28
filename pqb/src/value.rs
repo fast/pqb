@@ -205,15 +205,16 @@ fn write_array_value<W: SqlWriter>(w: &mut W, values: &[Value]) {
 
 fn write_string_value<W: SqlWriter>(w: &mut W, value: &str) {
     if should_escape(value) {
-        w.push_str("E'");
+        write_string_escaped(w, value)
     } else {
         w.push_str("'");
+        w.push_str(value);
+        w.push_str("'");
     }
-    write_escaped_string(w, value);
-    w.push_str("'");
 }
 
-fn write_escaped_string<W: SqlWriter>(w: &mut W, value: &str) {
+fn write_string_escaped<W: SqlWriter>(w: &mut W, value: &str) {
+    w.push_str("E'");
     for c in value.chars() {
         match c {
             '\x08' => w.push_str(r"\b"),
@@ -231,6 +232,7 @@ fn write_escaped_string<W: SqlWriter>(w: &mut W, value: &str) {
             c => w.push_char(c),
         }
     }
+    w.push_str("'");
 }
 
 fn should_escape(s: &str) -> bool {

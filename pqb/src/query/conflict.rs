@@ -207,20 +207,22 @@ enum OnConflictUpdate {
 }
 
 pub(crate) fn write_on_conflict<W: SqlWriter>(w: &mut W, on_conflict: &OnConflict) {
-    w.push_str(" ON CONFLICT ");
+    w.push_str(" ON CONFLICT");
     match &on_conflict.targets {
         OnConflictTarget::Exprs(exprs) => {
-            w.push_str("(");
-            for (i, expr) in exprs.iter().enumerate() {
-                if i > 0 {
-                    w.push_str(", ");
+            if !exprs.is_empty() {
+                w.push_str(" (");
+                for (i, expr) in exprs.iter().enumerate() {
+                    if i > 0 {
+                        w.push_str(", ");
+                    }
+                    write_expr(w, expr);
                 }
-                write_expr(w, expr);
+                w.push_str(")");
             }
-            w.push_str(")");
         }
         OnConflictTarget::Constraint(constraint) => {
-            w.push_str("ON CONSTRAINT ");
+            w.push_str(" ON CONSTRAINT ");
             w.push_char('"');
             w.push_str(constraint);
             w.push_char('"');
