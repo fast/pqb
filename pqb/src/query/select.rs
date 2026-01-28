@@ -24,8 +24,6 @@ use crate::types::JoinType;
 use crate::types::TableRef;
 use crate::types::write_iden;
 use crate::types::write_table_ref;
-use crate::value::Value;
-use crate::value::write_value;
 use crate::writer::SqlWriter;
 use crate::writer::SqlWriterValues;
 
@@ -42,6 +40,7 @@ pub struct Select {
     limit: Option<u64>,
     offset: Option<u64>,
     lock: Option<RowLevelLock>,
+    table_sample: Option<TableSample>,
 }
 
 /// Join expression.
@@ -262,6 +261,12 @@ impl Select {
         self.lock = Some(lock);
         self
     }
+
+    /// Apply TABLESAMPLE clause.
+    pub fn table_sample(mut self, table_sample: TableSample) -> Self {
+        self.table_sample = Some(table_sample);
+        self
+    }
 }
 
 impl Select {
@@ -373,6 +378,54 @@ enum RowLevelLockBehavior {
     SkipLocked,
 }
 
+/// TABLESAMPLE clause.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct TableSample {
+    method: SampleMethod,
+    percentage: f64,
+    repeatable: Option<f64>,
+}
+
+impl TableSample {
+    /// Create a SYSTEM sampling clause.
+    pub fn system() -> Self {
+        Self {
+            method: SampleMethod::SYSTEM,
+            percentage: 100.0,
+            repeatable: None,
+        }
+    }
+
+    /// Create a BERNOULLI sampling clause.
+    pub fn bernoulli() -> Self {
+        Self {
+            method: SampleMethod::BERNOULLI,
+            percentage: 100.0,
+            repeatable: None,
+        }
+    }
+
+    /// Set the sampling percentage.
+    ///
+    /// The percentage should be a value between 0.0 and 100.0.
+    pub fn percentage(mut self, percentage: f64) -> Self {
+        self.percentage = percentage;
+        self
+    }
+
+    /// Set the repeatable seed value.
+    pub fn repeatable(mut self, repeatable: f64) -> Self {
+        self.repeatable = Some(repeatable);
+        self
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum SampleMethod {
+    BERNOULLI,
+    SYSTEM,
+}
+
 pub(crate) fn write_select<W: SqlWriter>(w: &mut W, select: &Select) {
     w.push_str("SELECT ");
 
@@ -390,6 +443,21 @@ pub(crate) fn write_select<W: SqlWriter>(w: &mut W, select: &Select) {
             w.push_str(", ");
         }
         write_table_ref(w, table_ref);
+    }
+
+    if let Some(table_sample) = &select.table_sample {
+        match table_sample.method {
+            SampleMethod::BERNOULLI => w.push_str(" TABLESAMPLE BERNOULLI"),
+            SampleMethod::SYSTEM => w.push_str(" TABLESAMPLE SYSTEM"),
+        }
+        w.push_str(" (");
+        w.push_fmt(format_args!("{}", table_sample.percentage));
+        w.push_str(")");
+        if let Some(repeatable) = table_sample.repeatable {
+            w.push_str(" REPEATABLE (");
+            w.push_fmt(format_args!("{repeatable}"));
+            w.push_str(")");
+        }
     }
 
     for join in &select.joins {
@@ -436,12 +504,12 @@ pub(crate) fn write_select<W: SqlWriter>(w: &mut W, select: &Select) {
 
     if let Some(limit) = select.limit {
         w.push_str(" LIMIT ");
-        write_value(w, &Value::from(limit));
+        w.push_fmt(format_args!("{limit}"));
     }
 
     if let Some(offset) = select.offset {
         w.push_str(" OFFSET ");
-        write_value(w, &Value::from(offset));
+        w.push_fmt(format_args!("{offset}"));
     }
 
     if let Some(lock) = &select.lock {
