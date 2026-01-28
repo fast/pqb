@@ -14,6 +14,7 @@
 
 //! SQL query statements.
 
+mod conflict;
 mod delete;
 mod insert;
 mod order;
@@ -21,6 +22,7 @@ mod returning;
 mod select;
 mod update;
 
+pub use self::conflict::*;
 pub use self::delete::*;
 pub use self::insert::*;
 pub use self::order::*;

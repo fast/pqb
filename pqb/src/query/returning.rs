@@ -32,6 +32,14 @@ impl Returning {
         Self::All
     }
 
+    /// Create a RETURNING clause with a specific column.
+    pub fn column<T>(col: T) -> Self
+    where
+        T: IntoColumnRef,
+    {
+        Self::Exprs(vec![Expr::column(col)])
+    }
+
     /// Create a RETURNING clause with specific columns.
     pub fn columns<T, I>(cols: I) -> Self
     where

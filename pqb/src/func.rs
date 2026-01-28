@@ -30,6 +30,8 @@ enum Func {
     Cast,
     Count,
     Coalesce,
+    Lower,
+    Upper,
 }
 
 /// A function call expression.
@@ -115,6 +117,28 @@ impl FunctionCall {
         }
     }
 
+    /// Create an LOWER function call.
+    pub fn lower<T>(expr: T) -> FunctionCall
+    where
+        T: Into<Expr>,
+    {
+        FunctionCall {
+            func: Func::Lower,
+            args: vec![expr.into()],
+        }
+    }
+
+    /// Create an UPPER function call.
+    pub fn upper<T>(expr: T) -> FunctionCall
+    where
+        T: Into<Expr>,
+    {
+        FunctionCall {
+            func: Func::Upper,
+            args: vec![expr.into()],
+        }
+    }
+
     /// Call `CAST` function with a custom type.
     pub fn cast_as<V, I>(expr: V, iden: I) -> FunctionCall
     where
@@ -144,6 +168,8 @@ pub(crate) fn write_function_call<W: SqlWriter>(w: &mut W, call: &FunctionCall) 
         Func::Cast => w.push_str("CAST"),
         Func::Count => w.push_str("COUNT"),
         Func::Coalesce => w.push_str("COALESCE"),
+        Func::Lower => w.push_str("LOWER"),
+        Func::Upper => w.push_str("UPPER"),
     }
     w.push_char('(');
     for (i, arg) in call.args.iter().enumerate() {

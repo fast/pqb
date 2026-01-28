@@ -15,10 +15,10 @@
 use crate::SqlWriterValues;
 use crate::expr::Expr;
 use crate::expr::write_expr;
-use crate::query::Returning;
 use crate::query::Select;
 use crate::query::write_returning;
 use crate::query::write_select;
+use crate::query::{OnConflict, Returning, write_on_conflict};
 use crate::types::Iden;
 use crate::types::IntoIden;
 use crate::types::IntoTableRef;
@@ -33,6 +33,7 @@ pub struct Insert {
     table: Option<TableRef>,
     columns: Vec<Iden>,
     source: Option<InsertValueSource>,
+    on_conflict: Option<OnConflict>,
     defaults: Option<u32>,
     returning: Option<Returning>,
 }
@@ -75,6 +76,12 @@ impl Insert {
         for col in cols {
             self.columns.push(col.into_iden());
         }
+        self
+    }
+
+    /// ON CONFLICT expression
+    pub fn on_conflict(mut self, on_conflict: OnConflict) -> Self {
+        self.on_conflict = Some(on_conflict);
         self
     }
 
@@ -184,6 +191,10 @@ fn write_insert<W: SqlWriter>(w: &mut W, insert: &Insert) {
                 }
                 InsertValueSource::Select(select) => write_select(w, select),
             }
+        }
+
+        if let Some(on_conflict) = &insert.on_conflict {
+            write_on_conflict(w, on_conflict);
         }
 
         if let Some(returning) = &insert.returning {
