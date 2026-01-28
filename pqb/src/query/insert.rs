@@ -15,10 +15,12 @@
 use crate::SqlWriterValues;
 use crate::expr::Expr;
 use crate::expr::write_expr;
+use crate::query::OnConflict;
+use crate::query::Returning;
 use crate::query::Select;
+use crate::query::write_on_conflict;
 use crate::query::write_returning;
 use crate::query::write_select;
-use crate::query::{OnConflict, Returning, write_on_conflict};
 use crate::types::Iden;
 use crate::types::IntoIden;
 use crate::types::IntoTableRef;

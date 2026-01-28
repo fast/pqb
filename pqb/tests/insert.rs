@@ -12,9 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use insta::assert_snapshot;
 use pqb::expr::Expr;
 use pqb::func::FunctionCall;
-use pqb::query::{Insert, OnConflict};
+use pqb::query::Insert;
+use pqb::query::OnConflict;
 
 #[test]
 fn insert_on_conflict_1() {
@@ -26,20 +28,15 @@ fn insert_on_conflict_1() {
             3.14.into(),
         ])
         .on_conflict(OnConflict::column("id").update_column("aspect"));
-    assert_eq!(
+    assert_snapshot!(
         query.to_sql(),
-        [
-            r#"INSERT INTO "glyph" ("aspect", "image")"#,
-            r#"VALUES ('04108048005887010020060000204E0180400400', 3.14)"#,
-            r#"ON CONFLICT ("id") DO UPDATE SET "aspect" = "excluded"."aspect""#,
-        ]
-        .join(" ")
+        @"INSERT INTO \"glyph\" (\"aspect\", \"image\") VALUES ('04108048005887010020060000204E0180400400', 3.14) ON CONFLICT (\"id\") DO UPDATE SET \"aspect\" = \"excluded\".\"aspect\""
     );
 }
 
 #[test]
 fn insert_on_conflict_2() {
-    assert_eq!(
+    assert_snapshot!(
         Insert::new()
             .into_table("glyph")
             .columns(["aspect", "image"])
@@ -52,18 +49,13 @@ fn insert_on_conflict_2() {
                     .update_columns(["aspect", "image"])
             )
             .to_sql(),
-        [
-            r#"INSERT INTO "glyph" ("aspect", "image")"#,
-            r#"VALUES ('04108048005887010020060000204E0180400400', 3.14)"#,
-            r#"ON CONFLICT ("id", "aspect") DO UPDATE SET "aspect" = "excluded"."aspect", "image" = "excluded"."image""#,
-        ]
-            .join(" ")
+        @"INSERT INTO \"glyph\" (\"aspect\", \"image\") VALUES ('04108048005887010020060000204E0180400400', 3.14) ON CONFLICT (\"id\", \"aspect\") DO UPDATE SET \"aspect\" = \"excluded\".\"aspect\", \"image\" = \"excluded\".\"image\""
     );
 }
 
 #[test]
 fn insert_on_conflict_3() {
-    assert_eq!(
+    assert_snapshot!(
         Insert::new()
             .into_table("glyph")
             .columns(["aspect", "image"])
@@ -79,18 +71,13 @@ fn insert_on_conflict_3() {
                     ])
             )
             .to_sql(),
-        [
-            r#"INSERT INTO "glyph" ("aspect", "image")"#,
-            r#"VALUES ('04108048005887010020060000204E0180400400', 3.14)"#,
-            r#"ON CONFLICT ("id", "aspect") DO UPDATE SET "aspect" = '04108048005887010020060000204E0180400400', "image" = 3.14"#,
-        ]
-            .join(" ")
+        @"INSERT INTO \"glyph\" (\"aspect\", \"image\") VALUES ('04108048005887010020060000204E0180400400', 3.14) ON CONFLICT (\"id\", \"aspect\") DO UPDATE SET \"aspect\" = '04108048005887010020060000204E0180400400', \"image\" = 3.14"
     );
 }
 
 #[test]
 fn insert_on_conflict_4() {
-    assert_eq!(
+    assert_snapshot!(
         Insert::new()
             .into_table("glyph")
             .columns(["aspect", "image"])
@@ -102,18 +89,13 @@ fn insert_on_conflict_4() {
                 OnConflict::columns(["id", "aspect"]).value("image", Expr::value(1).add(2))
             )
             .to_sql(),
-        [
-            r#"INSERT INTO "glyph" ("aspect", "image")"#,
-            r#"VALUES ('04108048005887010020060000204E0180400400', 3.14)"#,
-            r#"ON CONFLICT ("id", "aspect") DO UPDATE SET "image" = 1 + 2"#,
-        ]
-        .join(" ")
+        @"INSERT INTO \"glyph\" (\"aspect\", \"image\") VALUES ('04108048005887010020060000204E0180400400', 3.14) ON CONFLICT (\"id\", \"aspect\") DO UPDATE SET \"image\" = 1 + 2"
     );
 }
 
 #[test]
 fn insert_on_conflict_5() {
-    assert_eq!(
+    assert_snapshot!(
         Insert::new()
             .into_table("glyph")
             .columns(["aspect", "image"])
@@ -127,18 +109,13 @@ fn insert_on_conflict_5() {
                     .update_column("image")
             )
             .to_sql(),
-        [
-            r#"INSERT INTO "glyph" ("aspect", "image")"#,
-            r#"VALUES ('04108048005887010020060000204E0180400400', 3.14)"#,
-            r#"ON CONFLICT ("id", "aspect") DO UPDATE SET "aspect" = '04108048005887010020060000204E0180400400', "image" = "excluded"."image""#,
-        ]
-            .join(" ")
+        @"INSERT INTO \"glyph\" (\"aspect\", \"image\") VALUES ('04108048005887010020060000204E0180400400', 3.14) ON CONFLICT (\"id\", \"aspect\") DO UPDATE SET \"aspect\" = '04108048005887010020060000204E0180400400', \"image\" = \"excluded\".\"image\""
     );
 }
 
 #[test]
 fn insert_on_conflict_6() {
-    assert_eq!(
+    assert_snapshot!(
         Insert::new()
             .into_table("glyph")
             .columns(["aspect", "image"])
@@ -152,18 +129,13 @@ fn insert_on_conflict_6() {
                     .value("image", Expr::value(1).add(2))
             )
             .to_sql(),
-        [
-            r#"INSERT INTO "glyph" ("aspect", "image")"#,
-            r#"VALUES ('04108048005887010020060000204E0180400400', 3.14)"#,
-            r#"ON CONFLICT ("id", "aspect") DO UPDATE SET "aspect" = "excluded"."aspect", "image" = 1 + 2"#,
-        ]
-            .join(" ")
+        @"INSERT INTO \"glyph\" (\"aspect\", \"image\") VALUES ('04108048005887010020060000204E0180400400', 3.14) ON CONFLICT (\"id\", \"aspect\") DO UPDATE SET \"aspect\" = \"excluded\".\"aspect\", \"image\" = 1 + 2"
     );
 }
 
 #[test]
 fn insert_on_conflict_7() {
-    assert_eq!(
+    assert_snapshot!(
         Insert::new()
             .into_table("glyph")
             .columns(["aspect", "image"])
@@ -173,18 +145,13 @@ fn insert_on_conflict_7() {
             ])
             .on_conflict(OnConflict::expr(Expr::column("id")).update_column("aspect"))
             .to_sql(),
-        [
-            r#"INSERT INTO "glyph" ("aspect", "image")"#,
-            r#"VALUES ('04108048005887010020060000204E0180400400', 3.14)"#,
-            r#"ON CONFLICT ("id") DO UPDATE SET "aspect" = "excluded"."aspect""#,
-        ]
-        .join(" ")
+        @"INSERT INTO \"glyph\" (\"aspect\", \"image\") VALUES ('04108048005887010020060000204E0180400400', 3.14) ON CONFLICT (\"id\") DO UPDATE SET \"aspect\" = \"excluded\".\"aspect\""
     );
 }
 
 #[test]
 fn insert_on_conflict_8() {
-    assert_eq!(
+    assert_snapshot!(
         Insert::new()
             .into_table("glyph")
             .columns(["aspect", "image"])
@@ -197,18 +164,13 @@ fn insert_on_conflict_8() {
                     .update_column("aspect")
             )
             .to_sql(),
-        [
-            r#"INSERT INTO "glyph" ("aspect", "image")"#,
-            r#"VALUES ('04108048005887010020060000204E0180400400', 3.14)"#,
-            r#"ON CONFLICT ("id", "aspect") DO UPDATE SET "aspect" = "excluded"."aspect""#,
-        ]
-        .join(" ")
+        @"INSERT INTO \"glyph\" (\"aspect\", \"image\") VALUES ('04108048005887010020060000204E0180400400', 3.14) ON CONFLICT (\"id\", \"aspect\") DO UPDATE SET \"aspect\" = \"excluded\".\"aspect\""
     );
 }
 
 #[test]
 fn insert_on_conflict_9() {
-    assert_eq!(
+    assert_snapshot!(
         Insert::new()
             .into_table("glyph")
             .columns(["aspect", "image"])
@@ -224,36 +186,26 @@ fn insert_on_conflict_9() {
                 .update_column("aspect")
             )
             .to_sql(),
-        [
-            r#"INSERT INTO "glyph" ("aspect", "image")"#,
-            r#"VALUES ('04108048005887010020060000204E0180400400', 3.14)"#,
-            r#"ON CONFLICT ("id", LOWER("tokens")) DO UPDATE SET "aspect" = "excluded"."aspect""#,
-        ]
-        .join(" ")
+        @"INSERT INTO \"glyph\" (\"aspect\", \"image\") VALUES ('04108048005887010020060000204E0180400400', 3.14) ON CONFLICT (\"id\", LOWER(\"tokens\")) DO UPDATE SET \"aspect\" = \"excluded\".\"aspect\""
     );
 }
 
 #[test]
 fn insert_on_conflict_10() {
-    assert_eq!(
+    assert_snapshot!(
         Insert::new()
             .into_table("font")
             .columns(["id", "name"])
             .values([15.into(), "CyberFont Sans Serif".into()])
             .on_conflict(OnConflict::constraint("name_unique").do_nothing())
             .to_sql(),
-        [
-            r#"INSERT INTO "font" ("id", "name")"#,
-            r#"VALUES (15, 'CyberFont Sans Serif')"#,
-            r#"ON CONFLICT ON CONSTRAINT "name_unique" DO NOTHING"#,
-        ]
-        .join(" ")
+        @"INSERT INTO \"font\" (\"id\", \"name\") VALUES (15, 'CyberFont Sans Serif') ON CONFLICT ON CONSTRAINT \"name_unique\" DO NOTHING"
     );
 }
 
 #[test]
 fn insert_on_conflict_11() {
-    assert_eq!(
+    assert_snapshot!(
         Insert::new()
             .into_table("font")
             .columns(["id", "name"])
@@ -263,29 +215,19 @@ fn insert_on_conflict_11() {
                     .do_nothing()
             )
             .to_sql(),
-        [
-            r#"INSERT INTO "font" ("id", "name")"#,
-            r#"VALUES (20, 'Monospaced terminal')"#,
-            r#"ON CONFLICT ("name", "variant" IS NULL) DO NOTHING"#,
-        ]
-        .join(" ")
+        @"INSERT INTO \"font\" (\"id\", \"name\") VALUES (20, 'Monospaced terminal') ON CONFLICT (\"name\", \"variant\" IS NULL) DO NOTHING"
     );
 }
 
 #[test]
 fn insert_on_conflict_do_nothing() {
-    assert_eq!(
+    assert_snapshot!(
         Insert::new()
             .into_table("glyph")
             .columns(["aspect", "image"])
             .values(["abcd".into(), 3.14.into()])
-            .on_conflict(OnConflict::columns(["id", "aspect"]).do_nothing(),)
+            .on_conflict(OnConflict::columns(["id", "aspect"]).do_nothing())
             .to_sql(),
-        [
-            r#"INSERT INTO "glyph" ("aspect", "image")"#,
-            r#"VALUES ('abcd', 3.14)"#,
-            r#"ON CONFLICT ("id", "aspect") DO NOTHING"#,
-        ]
-        .join(" ")
+        @"INSERT INTO \"glyph\" (\"aspect\", \"image\") VALUES ('abcd', 3.14) ON CONFLICT (\"id\", \"aspect\") DO NOTHING"
     );
 }

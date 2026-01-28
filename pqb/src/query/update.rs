@@ -13,9 +13,16 @@
 // limitations under the License.
 
 use crate::SqlWriterValues;
-use crate::expr::{Expr, write_expr};
-use crate::query::{Returning, write_returning};
-use crate::types::{Iden, IntoIden, IntoTableRef, TableRef, write_iden, write_table_ref};
+use crate::expr::Expr;
+use crate::expr::write_expr;
+use crate::query::Returning;
+use crate::query::write_returning;
+use crate::types::Iden;
+use crate::types::IntoIden;
+use crate::types::IntoTableRef;
+use crate::types::TableRef;
+use crate::types::write_iden;
+use crate::types::write_table_ref;
 use crate::writer::SqlWriter;
 
 /// Update existing rows in the table.

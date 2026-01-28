@@ -12,8 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::expr::{Expr, write_expr};
-use crate::types::{Iden, IntoIden, write_iden};
+use crate::expr::Expr;
+use crate::expr::write_expr;
+use crate::types::Iden;
+use crate::types::IntoIden;
+use crate::types::write_iden;
 use crate::writer::SqlWriter;
 
 /// ON CONFLICT clause for INSERT statements.
@@ -25,7 +28,23 @@ pub struct OnConflict {
     action_conditions: Vec<Expr>,
 }
 
+impl Default for OnConflict {
+    fn default() -> Self {
+        OnConflict {
+            targets: OnConflictTarget::Exprs(vec![]),
+            target_conditions: vec![],
+            action: None,
+            action_conditions: vec![],
+        }
+    }
+}
+
 impl OnConflict {
+    /// Create a new ON CONFLICT clause with empty targets.
+    pub fn new() -> Self {
+        Self::default()
+    }
+
     /// Set ON CONFLICT target column.
     pub fn column<C>(column: C) -> Self
     where
