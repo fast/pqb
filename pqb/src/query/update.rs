@@ -16,7 +16,9 @@ use crate::SqlWriterValues;
 use crate::expr::Expr;
 use crate::expr::write_expr;
 use crate::query::Returning;
+use crate::query::With;
 use crate::query::write_returning;
+use crate::query::write_with;
 use crate::types::Iden;
 use crate::types::IntoIden;
 use crate::types::IntoTableRef;
@@ -32,6 +34,7 @@ pub struct Update {
     values: Vec<(Iden, Expr)>,
     conditions: Vec<Expr>,
     returning: Option<Returning>,
+    with: Option<With>,
 }
 
 impl Update {
@@ -89,9 +92,20 @@ impl Update {
         self.returning = Some(returning);
         self
     }
+
+    /// WITH clause.
+    pub fn with(mut self, with: With) -> Self {
+        self.with = Some(with);
+        self
+    }
 }
 
 fn write_update<W: SqlWriter>(w: &mut W, update: &Update) {
+    if let Some(with) = &update.with {
+        write_with(w, with);
+        w.push_char(' ');
+    }
+
     w.push_str("UPDATE ");
 
     if let Some(table) = &update.table {

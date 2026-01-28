@@ -32,6 +32,7 @@
 pub mod expr;
 pub mod func;
 pub mod query;
+pub mod table;
 pub mod types;
 pub mod value;
 

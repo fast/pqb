@@ -25,12 +25,12 @@ fn insert_on_conflict_1() {
         .columns(["aspect", "image"])
         .values([
             "04108048005887010020060000204E0180400400".into(),
-            3.14.into(),
+            42.0321.into(),
         ])
         .on_conflict(OnConflict::column("id").update_column("aspect"));
     assert_snapshot!(
         query.to_sql(),
-        @r#"INSERT INTO "glyph" ("aspect", "image") VALUES ('04108048005887010020060000204E0180400400', 3.14) ON CONFLICT ("id") DO UPDATE SET "aspect" = "excluded"."aspect""#
+        @r#"INSERT INTO "glyph" ("aspect", "image") VALUES ('04108048005887010020060000204E0180400400', 42.0321) ON CONFLICT ("id") DO UPDATE SET "aspect" = "excluded"."aspect""#
     );
 }
 
@@ -42,14 +42,14 @@ fn insert_on_conflict_2() {
             .columns(["aspect", "image"])
             .values([
                 "04108048005887010020060000204E0180400400".into(),
-                3.14.into(),
+                42.0321.into(),
             ])
             .on_conflict(
                 OnConflict::columns(["id", "aspect"])
                     .update_columns(["aspect", "image"])
             )
             .to_sql(),
-        @r#"INSERT INTO "glyph" ("aspect", "image") VALUES ('04108048005887010020060000204E0180400400', 3.14) ON CONFLICT ("id", "aspect") DO UPDATE SET "aspect" = "excluded"."aspect", "image" = "excluded"."image""#
+        @r#"INSERT INTO "glyph" ("aspect", "image") VALUES ('04108048005887010020060000204E0180400400', 42.0321) ON CONFLICT ("id", "aspect") DO UPDATE SET "aspect" = "excluded"."aspect", "image" = "excluded"."image""#
     );
 }
 
@@ -61,17 +61,17 @@ fn insert_on_conflict_3() {
             .columns(["aspect", "image"])
             .values([
                 "04108048005887010020060000204E0180400400".into(),
-                3.14.into(),
+                42.0321.into(),
             ])
             .on_conflict(
                 OnConflict::columns(["id", "aspect"])
                     .values([
                         ("aspect", "04108048005887010020060000204E0180400400".into()),
-                        ("image", 3.14.into()),
+                        ("image", 42.0321.into()),
                     ])
             )
             .to_sql(),
-        @r#"INSERT INTO "glyph" ("aspect", "image") VALUES ('04108048005887010020060000204E0180400400', 3.14) ON CONFLICT ("id", "aspect") DO UPDATE SET "aspect" = '04108048005887010020060000204E0180400400', "image" = 3.14"#
+        @r#"INSERT INTO "glyph" ("aspect", "image") VALUES ('04108048005887010020060000204E0180400400', 42.0321) ON CONFLICT ("id", "aspect") DO UPDATE SET "aspect" = '04108048005887010020060000204E0180400400', "image" = 42.0321"#
     );
 }
 
@@ -83,13 +83,13 @@ fn insert_on_conflict_4() {
             .columns(["aspect", "image"])
             .values([
                 "04108048005887010020060000204E0180400400".into(),
-                3.14.into(),
+                42.0321.into(),
             ])
             .on_conflict(
                 OnConflict::columns(["id", "aspect"]).value("image", Expr::value(1).add(2))
             )
             .to_sql(),
-        @r#"INSERT INTO "glyph" ("aspect", "image") VALUES ('04108048005887010020060000204E0180400400', 3.14) ON CONFLICT ("id", "aspect") DO UPDATE SET "image" = 1 + 2"#
+        @r#"INSERT INTO "glyph" ("aspect", "image") VALUES ('04108048005887010020060000204E0180400400', 42.0321) ON CONFLICT ("id", "aspect") DO UPDATE SET "image" = 1 + 2"#
     );
 }
 
@@ -101,7 +101,7 @@ fn insert_on_conflict_5() {
             .columns(["aspect", "image"])
             .values([
                 "04108048005887010020060000204E0180400400".into(),
-                3.14.into(),
+                42.0321.into(),
             ])
             .on_conflict(
                 OnConflict::columns(["id", "aspect"])
@@ -109,7 +109,7 @@ fn insert_on_conflict_5() {
                     .update_column("image")
             )
             .to_sql(),
-        @r#"INSERT INTO "glyph" ("aspect", "image") VALUES ('04108048005887010020060000204E0180400400', 3.14) ON CONFLICT ("id", "aspect") DO UPDATE SET "aspect" = '04108048005887010020060000204E0180400400', "image" = "excluded"."image""#
+        @r#"INSERT INTO "glyph" ("aspect", "image") VALUES ('04108048005887010020060000204E0180400400', 42.0321) ON CONFLICT ("id", "aspect") DO UPDATE SET "aspect" = '04108048005887010020060000204E0180400400', "image" = "excluded"."image""#
     );
 }
 
@@ -121,7 +121,7 @@ fn insert_on_conflict_6() {
             .columns(["aspect", "image"])
             .values([
                 "04108048005887010020060000204E0180400400".into(),
-                3.14.into(),
+                42.0321.into(),
             ])
             .on_conflict(
                 OnConflict::columns(["id", "aspect"])
@@ -129,7 +129,7 @@ fn insert_on_conflict_6() {
                     .value("image", Expr::value(1).add(2))
             )
             .to_sql(),
-        @r#"INSERT INTO "glyph" ("aspect", "image") VALUES ('04108048005887010020060000204E0180400400', 3.14) ON CONFLICT ("id", "aspect") DO UPDATE SET "aspect" = "excluded"."aspect", "image" = 1 + 2"#
+        @r#"INSERT INTO "glyph" ("aspect", "image") VALUES ('04108048005887010020060000204E0180400400', 42.0321) ON CONFLICT ("id", "aspect") DO UPDATE SET "aspect" = "excluded"."aspect", "image" = 1 + 2"#
     );
 }
 
@@ -141,11 +141,11 @@ fn insert_on_conflict_7() {
             .columns(["aspect", "image"])
             .values([
                 "04108048005887010020060000204E0180400400".into(),
-                3.14.into(),
+                42.0321.into(),
             ])
             .on_conflict(OnConflict::expr(Expr::column("id")).update_column("aspect"))
             .to_sql(),
-        @r#"INSERT INTO "glyph" ("aspect", "image") VALUES ('04108048005887010020060000204E0180400400', 3.14) ON CONFLICT ("id") DO UPDATE SET "aspect" = "excluded"."aspect""#
+        @r#"INSERT INTO "glyph" ("aspect", "image") VALUES ('04108048005887010020060000204E0180400400', 42.0321) ON CONFLICT ("id") DO UPDATE SET "aspect" = "excluded"."aspect""#
     );
 }
 
@@ -157,14 +157,14 @@ fn insert_on_conflict_8() {
             .columns(["aspect", "image"])
             .values([
                 "04108048005887010020060000204E0180400400".into(),
-                3.14.into(),
+                42.0321.into(),
             ])
             .on_conflict(
                 OnConflict::exprs([Expr::column("id"), Expr::column("aspect")])
                     .update_column("aspect")
             )
             .to_sql(),
-        @r#"INSERT INTO "glyph" ("aspect", "image") VALUES ('04108048005887010020060000204E0180400400', 3.14) ON CONFLICT ("id", "aspect") DO UPDATE SET "aspect" = "excluded"."aspect""#
+        @r#"INSERT INTO "glyph" ("aspect", "image") VALUES ('04108048005887010020060000204E0180400400', 42.0321) ON CONFLICT ("id", "aspect") DO UPDATE SET "aspect" = "excluded"."aspect""#
     );
 }
 
@@ -176,7 +176,7 @@ fn insert_on_conflict_9() {
             .columns(["aspect", "image"])
             .values([
                 "04108048005887010020060000204E0180400400".into(),
-                3.14.into(),
+                42.0321.into(),
             ])
             .on_conflict(
                 OnConflict::exprs([
@@ -186,7 +186,7 @@ fn insert_on_conflict_9() {
                 .update_column("aspect")
             )
             .to_sql(),
-        @r#"INSERT INTO "glyph" ("aspect", "image") VALUES ('04108048005887010020060000204E0180400400', 3.14) ON CONFLICT ("id", LOWER("tokens")) DO UPDATE SET "aspect" = "excluded"."aspect""#
+        @r#"INSERT INTO "glyph" ("aspect", "image") VALUES ('04108048005887010020060000204E0180400400', 42.0321) ON CONFLICT ("id", LOWER("tokens")) DO UPDATE SET "aspect" = "excluded"."aspect""#
     );
 }
 
@@ -225,9 +225,9 @@ fn insert_on_conflict_do_nothing() {
         Insert::new()
             .into_table("glyph")
             .columns(["aspect", "image"])
-            .values(["abcd".into(), 3.14.into()])
+            .values(["abcd".into(), 42.0321.into()])
             .on_conflict(OnConflict::columns(["id", "aspect"]).do_nothing())
             .to_sql(),
-        @r#"INSERT INTO "glyph" ("aspect", "image") VALUES ('abcd', 3.14) ON CONFLICT ("id", "aspect") DO NOTHING"#
+        @r#"INSERT INTO "glyph" ("aspect", "image") VALUES ('abcd', 42.0321) ON CONFLICT ("id", "aspect") DO NOTHING"#
     );
 }

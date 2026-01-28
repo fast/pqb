@@ -12,22 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//! SQL query statements.
+//! Table definition and alternations statements.
 
-mod conflict;
-mod delete;
-mod insert;
-mod order;
-mod returning;
-mod select;
-mod update;
-mod with;
+mod alter;
+mod column;
 
-pub use self::conflict::*;
-pub use self::delete::*;
-pub use self::insert::*;
-pub use self::order::*;
-pub use self::returning::*;
-pub use self::select::*;
-pub use self::update::*;
-pub use self::with::*;
+pub use self::alter::*;
+pub use self::column::*;

@@ -18,9 +18,11 @@ use crate::expr::write_expr;
 use crate::query::OnConflict;
 use crate::query::Returning;
 use crate::query::Select;
+use crate::query::With;
 use crate::query::write_on_conflict;
 use crate::query::write_returning;
 use crate::query::write_select;
+use crate::query::write_with;
 use crate::types::Iden;
 use crate::types::IntoIden;
 use crate::types::IntoTableRef;
@@ -38,6 +40,7 @@ pub struct Insert {
     on_conflict: Option<OnConflict>,
     defaults: Option<u32>,
     returning: Option<Returning>,
+    with: Option<With>,
 }
 
 impl Insert {
@@ -93,6 +96,12 @@ impl Insert {
         self
     }
 
+    /// WITH clause.
+    pub fn with(mut self, with: With) -> Self {
+        self.with = Some(with);
+        self
+    }
+
     /// Specify a row of values to be inserted.
     ///
     /// # Panics
@@ -143,6 +152,11 @@ enum InsertValueSource {
 }
 
 fn write_insert<W: SqlWriter>(w: &mut W, insert: &Insert) {
+    if let Some(with) = &insert.with {
+        write_with(w, with);
+        w.push_char(' ');
+    }
+
     w.push_str("INSERT ");
 
     if let Some(table) = &insert.table {

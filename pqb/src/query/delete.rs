@@ -16,7 +16,9 @@ use crate::SqlWriterValues;
 use crate::expr::Expr;
 use crate::expr::write_expr;
 use crate::query::Returning;
+use crate::query::With;
 use crate::query::write_returning;
+use crate::query::write_with;
 use crate::types::IntoTableRef;
 use crate::types::TableRef;
 use crate::types::write_table_ref;
@@ -28,6 +30,7 @@ pub struct Delete {
     table: Option<TableRef>,
     conditions: Vec<Expr>,
     returning: Option<Returning>,
+    with: Option<With>,
 }
 
 impl Delete {
@@ -69,13 +72,24 @@ impl Delete {
     }
 
     /// RETURNING expressions.
-    pub fn returning(&mut self, returning_cols: Returning) -> &mut Self {
+    pub fn returning(mut self, returning_cols: Returning) -> Self {
         self.returning = Some(returning_cols);
+        self
+    }
+
+    /// WITH clause.
+    pub fn with(mut self, with: With) -> Self {
+        self.with = Some(with);
         self
     }
 }
 
 fn write_delete<W: SqlWriter>(w: &mut W, delete: &Delete) {
+    if let Some(with) = &delete.with {
+        write_with(w, with);
+        w.push_char(' ');
+    }
+
     w.push_str("DELETE ");
 
     if let Some(table) = &delete.table {

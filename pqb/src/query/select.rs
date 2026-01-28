@@ -14,8 +14,10 @@
 
 use crate::expr::Expr;
 use crate::expr::write_expr;
+use crate::query::With;
 use crate::query::order::Order;
 use crate::query::order::write_order;
+use crate::query::write_with;
 use crate::types::Iden;
 use crate::types::IntoColumnRef;
 use crate::types::IntoIden;
@@ -41,6 +43,7 @@ pub struct Select {
     offset: Option<u64>,
     lock: Option<RowLevelLock>,
     table_sample: Option<TableSample>,
+    with: Option<With>,
 }
 
 /// Join expression.
@@ -267,6 +270,12 @@ impl Select {
         self.table_sample = Some(table_sample);
         self
     }
+
+    /// WITH clause.
+    pub fn with(mut self, with: With) -> Self {
+        self.with = Some(with);
+        self
+    }
 }
 
 impl Select {
@@ -306,7 +315,7 @@ impl RowLevelLock {
     /// Create a new row-level lock for update.
     pub fn for_update() -> Self {
         Self {
-            ty: RowLevelLockType::ForUpdate,
+            ty: RowLevelLockType::Update,
             tables: vec![],
             behavior: None,
         }
@@ -315,7 +324,7 @@ impl RowLevelLock {
     /// Create a new row-level lock for no key update.
     pub fn for_no_key_update() -> Self {
         Self {
-            ty: RowLevelLockType::ForNoKeyUpdate,
+            ty: RowLevelLockType::NoKeyUpdate,
             tables: vec![],
             behavior: None,
         }
@@ -324,7 +333,7 @@ impl RowLevelLock {
     /// Create a new row-level lock for share.
     pub fn for_share() -> Self {
         Self {
-            ty: RowLevelLockType::ForShare,
+            ty: RowLevelLockType::Share,
             tables: vec![],
             behavior: None,
         }
@@ -333,7 +342,7 @@ impl RowLevelLock {
     /// Create a new row-level lock for key share.
     pub fn for_key_share() -> Self {
         Self {
-            ty: RowLevelLockType::ForKeyShare,
+            ty: RowLevelLockType::KeyShare,
             tables: vec![],
             behavior: None,
         }
@@ -365,10 +374,10 @@ impl RowLevelLock {
 /// Types of row-level locks.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum RowLevelLockType {
-    ForUpdate,
-    ForNoKeyUpdate,
-    ForShare,
-    ForKeyShare,
+    Update,
+    NoKeyUpdate,
+    Share,
+    KeyShare,
 }
 
 /// Behavior of row-level locks.
@@ -421,12 +430,18 @@ impl TableSample {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[expect(clippy::upper_case_acronyms)]
 enum SampleMethod {
     BERNOULLI,
     SYSTEM,
 }
 
 pub(crate) fn write_select<W: SqlWriter>(w: &mut W, select: &Select) {
+    if let Some(with) = &select.with {
+        write_with(w, with);
+        w.push_char(' ');
+    }
+
     w.push_str("SELECT ");
 
     for (i, select_expr) in select.selects.iter().enumerate() {
@@ -527,10 +542,10 @@ fn write_select_expr<W: SqlWriter>(w: &mut W, select_expr: &SelectExpr) {
 
 fn write_row_level_lock<W: SqlWriter>(w: &mut W, lock: &RowLevelLock) {
     match lock.ty {
-        RowLevelLockType::ForUpdate => w.push_str(" FOR UPDATE"),
-        RowLevelLockType::ForNoKeyUpdate => w.push_str(" FOR NO KEY UPDATE"),
-        RowLevelLockType::ForShare => w.push_str(" FOR SHARE"),
-        RowLevelLockType::ForKeyShare => w.push_str(" FOR KEY SHARE"),
+        RowLevelLockType::Update => w.push_str(" FOR UPDATE"),
+        RowLevelLockType::NoKeyUpdate => w.push_str(" FOR NO KEY UPDATE"),
+        RowLevelLockType::Share => w.push_str(" FOR SHARE"),
+        RowLevelLockType::KeyShare => w.push_str(" FOR KEY SHARE"),
     }
 
     if !lock.tables.is_empty() {
