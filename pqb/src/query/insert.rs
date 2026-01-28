@@ -151,7 +151,7 @@ enum InsertValueSource {
     Select(Box<Select>),
 }
 
-fn write_insert<W: SqlWriter>(w: &mut W, insert: &Insert) {
+pub(crate) fn write_insert<W: SqlWriter>(w: &mut W, insert: &Insert) {
     if let Some(with) = &insert.with {
         write_with(w, with);
         w.push_char(' ');

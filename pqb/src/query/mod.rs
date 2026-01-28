@@ -16,6 +16,7 @@
 
 mod conflict;
 mod delete;
+mod explain;
 mod insert;
 mod order;
 mod returning;
@@ -25,6 +26,7 @@ mod with;
 
 pub use self::conflict::*;
 pub use self::delete::*;
+pub use self::explain::*;
 pub use self::insert::*;
 pub use self::order::*;
 pub use self::returning::*;

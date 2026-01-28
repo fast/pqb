@@ -100,7 +100,7 @@ impl Update {
     }
 }
 
-fn write_update<W: SqlWriter>(w: &mut W, update: &Update) {
+pub(crate) fn write_update<W: SqlWriter>(w: &mut W, update: &Update) {
     if let Some(with) = &update.with {
         write_with(w, with);
         w.push_char(' ');
