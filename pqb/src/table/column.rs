@@ -130,6 +130,42 @@ impl ColumnDef {
         self.ty = Some(ColumnType::Uuid);
         self
     }
+
+    /// Set column as generated with expression.
+    pub fn generated_as<E>(mut self, expr: E) -> Self
+    where
+        E: Into<Expr>,
+    {
+        self.spec.generated = Some(GeneratedColumn {
+            expr: expr.into(),
+            kind: None,
+        });
+        self
+    }
+
+    /// Set column as generated with expression and stored storage.
+    pub fn generated_as_stored<E>(mut self, expr: E) -> Self
+    where
+        E: Into<Expr>,
+    {
+        self.spec.generated = Some(GeneratedColumn {
+            expr: expr.into(),
+            kind: Some(GeneratedColumnKind::Stored),
+        });
+        self
+    }
+
+    /// Set column as generated with expression and virtual storage.
+    pub fn generated_as_virtual<E>(mut self, expr: E) -> Self
+    where
+        E: Into<Expr>,
+    {
+        self.spec.generated = Some(GeneratedColumn {
+            expr: expr.into(),
+            kind: Some(GeneratedColumnKind::Virtual),
+        });
+        self
+    }
 }
 
 /// Column data types.
@@ -162,8 +198,27 @@ pub enum ColumnType {
 pub struct ColumnSpec {
     pub nullable: Option<bool>,
     pub default: Option<Expr>,
+    pub generated: Option<GeneratedColumn>,
     pub unique: bool,
     pub primary_key: bool,
+}
+
+/// Generated column specification.
+#[derive(Debug, Clone)]
+#[non_exhaustive]
+#[expect(missing_docs)]
+pub struct GeneratedColumn {
+    pub expr: Expr,
+    pub kind: Option<GeneratedColumnKind>,
+}
+
+/// Generated column storage kind.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
+#[expect(missing_docs)]
+pub enum GeneratedColumnKind {
+    Stored,
+    Virtual,
 }
 
 pub(crate) fn write_column_type<W: SqlWriter>(w: &mut W, column_type: &ColumnType) {
@@ -194,6 +249,7 @@ pub(crate) fn write_column_spec<W: SqlWriter>(w: &mut W, column_spec: &ColumnSpe
     let ColumnSpec {
         nullable,
         default,
+        generated,
         unique,
         primary_key,
     } = column_spec;
@@ -211,6 +267,18 @@ pub(crate) fn write_column_spec<W: SqlWriter>(w: &mut W, column_spec: &ColumnSpe
                 write_expr(w, default);
                 w.push_str(")");
             }
+        }
+    }
+
+    if let Some(generated) = generated {
+        w.push_str(" GENERATED ALWAYS AS (");
+        write_expr(w, &generated.expr);
+        w.push_str(")");
+        if let Some(kind) = generated.kind {
+            w.push_str(match kind {
+                GeneratedColumnKind::Stored => " STORED",
+                GeneratedColumnKind::Virtual => " VIRTUAL",
+            });
         }
     }
 
