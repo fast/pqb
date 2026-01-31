@@ -248,6 +248,70 @@ impl Expr {
         self.binary(BinaryOp::LessThanOrEqual, right)
     }
 
+    /// Range contains (`@>`).
+    pub fn contains<R>(self, right: R) -> Self
+    where
+        R: Into<Expr>,
+    {
+        self.binary(BinaryOp::Contains, right)
+    }
+
+    /// Range is contained by (`<@`).
+    pub fn contained_by<R>(self, right: R) -> Self
+    where
+        R: Into<Expr>,
+    {
+        self.binary(BinaryOp::ContainedBy, right)
+    }
+
+    /// Range overlap (`&&`).
+    pub fn overlaps<R>(self, right: R) -> Self
+    where
+        R: Into<Expr>,
+    {
+        self.binary(BinaryOp::Overlaps, right)
+    }
+
+    /// Range is strictly left of (`<<`).
+    pub fn strictly_left_of<R>(self, right: R) -> Self
+    where
+        R: Into<Expr>,
+    {
+        self.binary(BinaryOp::StrictlyLeftOf, right)
+    }
+
+    /// Range is strictly right of (`>>`).
+    pub fn strictly_right_of<R>(self, right: R) -> Self
+    where
+        R: Into<Expr>,
+    {
+        self.binary(BinaryOp::StrictlyRightOf, right)
+    }
+
+    /// Range does not extend to the right of (`&<`).
+    pub fn does_not_extend_right_of<R>(self, right: R) -> Self
+    where
+        R: Into<Expr>,
+    {
+        self.binary(BinaryOp::DoesNotExtendRightOf, right)
+    }
+
+    /// Range does not extend to the left of (`&>`).
+    pub fn does_not_extend_left_of<R>(self, right: R) -> Self
+    where
+        R: Into<Expr>,
+    {
+        self.binary(BinaryOp::DoesNotExtendLeftOf, right)
+    }
+
+    /// Range is adjacent to (`-|-`).
+    pub fn adjacent_to<R>(self, right: R) -> Self
+    where
+        R: Into<Expr>,
+    {
+        self.binary(BinaryOp::AdjacentTo, right)
+    }
+
     /// Create any binary operation.
     pub fn binary<R>(self, op: BinaryOp, rhs: R) -> Self
     where
@@ -418,6 +482,14 @@ pub enum BinaryOp {
     LessThanOrEqual,
     GreaterThan,
     GreaterThanOrEqual,
+    Contains,
+    ContainedBy,
+    Overlaps,
+    StrictlyLeftOf,
+    StrictlyRightOf,
+    DoesNotExtendRightOf,
+    DoesNotExtendLeftOf,
+    AdjacentTo,
 }
 
 impl Expr {
@@ -573,6 +645,14 @@ fn write_binary_op<W: SqlWriter>(w: &mut W, op: &BinaryOp) {
         BinaryOp::LessThanOrEqual => "<=",
         BinaryOp::GreaterThan => ">",
         BinaryOp::GreaterThanOrEqual => ">=",
+        BinaryOp::Contains => "@>",
+        BinaryOp::ContainedBy => "<@",
+        BinaryOp::Overlaps => "&&",
+        BinaryOp::StrictlyLeftOf => "<<",
+        BinaryOp::StrictlyRightOf => ">>",
+        BinaryOp::DoesNotExtendRightOf => "&<",
+        BinaryOp::DoesNotExtendLeftOf => "&>",
+        BinaryOp::AdjacentTo => "-|-",
         BinaryOp::Add => "+",
         BinaryOp::Sub => "-",
         BinaryOp::Mul => "*",
@@ -733,6 +813,14 @@ impl Operator {
                         | BinaryOp::GreaterThanOrEqual
                         | BinaryOp::GreaterThan
                         | BinaryOp::NotEqual
+                        | BinaryOp::Contains
+                        | BinaryOp::ContainedBy
+                        | BinaryOp::Overlaps
+                        | BinaryOp::StrictlyLeftOf
+                        | BinaryOp::StrictlyRightOf
+                        | BinaryOp::DoesNotExtendRightOf
+                        | BinaryOp::DoesNotExtendLeftOf
+                        | BinaryOp::AdjacentTo
                 )
             }
             _ => false,
