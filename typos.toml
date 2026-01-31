@@ -16,7 +16,7 @@
 "Buil" = "Buil"
 
 [default]
-extend-ignore-re = ["brin", "BRIN"]
+extend-ignore-re = ["(?i)brin"]
 
 [files]
 extend-exclude = []
