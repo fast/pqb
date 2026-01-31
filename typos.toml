@@ -15,5 +15,8 @@
 [default.extend-words]
 "Buil" = "Buil"
 
+[default]
+extend-ignore-re = ["brin", "BRIN"]
+
 [files]
-extend-exclude = ["brin"]
+extend-exclude = []
