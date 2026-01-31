@@ -131,18 +131,6 @@ impl ColumnDef {
         self
     }
 
-    /// Set column as generated with expression.
-    pub fn generated_as<E>(mut self, expr: E) -> Self
-    where
-        E: Into<Expr>,
-    {
-        self.spec.generated = Some(GeneratedColumn {
-            expr: expr.into(),
-            kind: None,
-        });
-        self
-    }
-
     /// Set column as generated with expression and stored storage.
     pub fn generated_as_stored<E>(mut self, expr: E) -> Self
     where
@@ -150,7 +138,7 @@ impl ColumnDef {
     {
         self.spec.generated = Some(GeneratedColumn {
             expr: expr.into(),
-            kind: Some(GeneratedColumnKind::Stored),
+            kind: GeneratedColumnKind::Stored,
         });
         self
     }
@@ -162,7 +150,7 @@ impl ColumnDef {
     {
         self.spec.generated = Some(GeneratedColumn {
             expr: expr.into(),
-            kind: Some(GeneratedColumnKind::Virtual),
+            kind: GeneratedColumnKind::Virtual,
         });
         self
     }
@@ -209,7 +197,8 @@ pub struct ColumnSpec {
 #[expect(missing_docs)]
 pub struct GeneratedColumn {
     pub expr: Expr,
-    pub kind: Option<GeneratedColumnKind>,
+    /// Before PostgreSQL 18, STORED is the only supported kind and must be specified.
+    pub kind: GeneratedColumnKind,
 }
 
 /// Generated column storage kind.
@@ -274,12 +263,10 @@ pub(crate) fn write_column_spec<W: SqlWriter>(w: &mut W, column_spec: &ColumnSpe
         w.push_str(" GENERATED ALWAYS AS (");
         write_expr(w, &generated.expr);
         w.push_str(")");
-        if let Some(kind) = generated.kind {
-            w.push_str(match kind {
-                GeneratedColumnKind::Stored => " STORED",
-                GeneratedColumnKind::Virtual => " VIRTUAL",
-            });
-        }
+        w.push_str(match generated.kind {
+            GeneratedColumnKind::Stored => " STORED",
+            GeneratedColumnKind::Virtual => " VIRTUAL",
+        });
     }
 
     if *primary_key {

@@ -71,7 +71,12 @@ fn create_table_generated_column() {
                     .int()
                     .generated_as_stored(Expr::column("a").add(Expr::column("b"))),
             )
+            .column(
+                ColumnDef::new("avg")
+                    .int()
+                    .generated_as_virtual(Expr::column("sum").div(Expr::value(2))),
+            )
             .to_sql(),
-        @r#"CREATE TABLE "calc" ( "a" integer, "b" integer, "sum" integer GENERATED ALWAYS AS ("a" + "b") STORED )"#
+        @r#"CREATE TABLE "calc" ( "a" integer, "b" integer, "sum" integer GENERATED ALWAYS AS ("a" + "b") STORED, "avg" integer GENERATED ALWAYS AS ("sum" / 2) VIRTUAL )"#
     );
 }
