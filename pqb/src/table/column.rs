@@ -43,6 +43,9 @@ impl ColumnDef {
 
     /// Set default value for the column.
     pub fn default(mut self, expr: Expr) -> Self {
+        if self.spec.generated.is_some() {
+            panic!("A generated column cannot have a default value.");
+        }
         self.spec.default = Some(expr);
         self
     }
@@ -59,9 +62,27 @@ impl ColumnDef {
         self
     }
 
+    /// Set column type as char with length.
+    pub fn char(mut self, size: u32) -> Self {
+        self.ty = Some(ColumnType::Char(size));
+        self
+    }
+
+    /// Set column type as varchar with length.
+    pub fn varchar(mut self, size: u32) -> Self {
+        self.ty = Some(ColumnType::Varchar(size));
+        self
+    }
+
     /// Set column type as text
     pub fn text(mut self) -> Self {
         self.ty = Some(ColumnType::Text);
+        self
+    }
+
+    /// Set column type as bytea
+    pub fn bytea(mut self) -> Self {
+        self.ty = Some(ColumnType::Bytea);
         self
     }
 
@@ -95,6 +116,72 @@ impl ColumnDef {
         self
     }
 
+    /// Set column type as numeric with precision and scale.
+    pub fn numeric(mut self, precision: u32, scale: u32) -> Self {
+        self.ty = Some(ColumnType::Numeric(precision, scale));
+        self
+    }
+
+    /// Set column type as smallserial
+    pub fn smallserial(mut self) -> Self {
+        self.ty = Some(ColumnType::SmallSerial);
+        self
+    }
+
+    /// Set column type as serial
+    pub fn serial(mut self) -> Self {
+        self.ty = Some(ColumnType::Serial);
+        self
+    }
+
+    /// Set column type as bigserial
+    pub fn bigserial(mut self) -> Self {
+        self.ty = Some(ColumnType::BigSerial);
+        self
+    }
+
+    /// Set column type as int4range
+    pub fn int4_range(mut self) -> Self {
+        self.ty = Some(ColumnType::Int4Range);
+        self
+    }
+
+    /// Set column type as int8range
+    pub fn int8_range(mut self) -> Self {
+        self.ty = Some(ColumnType::Int8Range);
+        self
+    }
+
+    /// Set column type as numrange
+    pub fn num_range(mut self) -> Self {
+        self.ty = Some(ColumnType::NumRange);
+        self
+    }
+
+    /// Set column type as tsrange
+    pub fn ts_range(mut self) -> Self {
+        self.ty = Some(ColumnType::TsRange);
+        self
+    }
+
+    /// Set column type as tstzrange
+    pub fn ts_tz_range(mut self) -> Self {
+        self.ty = Some(ColumnType::TsTzRange);
+        self
+    }
+
+    /// Set column type as daterange
+    pub fn date_range(mut self) -> Self {
+        self.ty = Some(ColumnType::DateRange);
+        self
+    }
+
+    /// Set column type as timestamp without time zone.
+    pub fn date_time(mut self) -> Self {
+        self.ty = Some(ColumnType::DateTime);
+        self
+    }
+
     /// Set column type as timestamp
     pub fn timestamp(mut self) -> Self {
         self.ty = Some(ColumnType::Timestamp);
@@ -119,6 +206,12 @@ impl ColumnDef {
         self
     }
 
+    /// Set column type as boolean
+    pub fn boolean(mut self) -> Self {
+        self.ty = Some(ColumnType::Boolean);
+        self
+    }
+
     /// Set column type as JSON.
     pub fn json(mut self) -> Self {
         self.ty = Some(ColumnType::Json);
@@ -134,6 +227,12 @@ impl ColumnDef {
     /// Set column type as uuid
     pub fn uuid(mut self) -> Self {
         self.ty = Some(ColumnType::Uuid);
+        self
+    }
+
+    /// Set column type as array of the given element type.
+    pub fn array_of(mut self, ty: ColumnType) -> Self {
+        self.ty = Some(ColumnType::Array(Arc::new(ty)));
         self
     }
 
@@ -182,21 +281,50 @@ impl ColumnDef {
 #[non_exhaustive]
 #[expect(missing_docs)]
 pub enum ColumnType {
+    // Character types
+    Char(u32),
+    Varchar(u32),
     Text,
+
+    // Binary types
+    Bytea,
+
+    // Numeric types
     SmallInt,
     Int,
     BigInt,
     Float,
     Double,
+    /// NUMERIC(prec, scale)
+    Numeric(u32, u32),
+
+    // Range types
+    Int4Range,
+    Int8Range,
+    NumRange,
+    TsRange,
+    TsTzRange,
+    DateRange,
+
+    // Serial types
+    SmallSerial,
+    Serial,
+    BigSerial,
+
+    // Date/Time types
     DateTime,
     Timestamp,
     TimestampWithTimeZone,
     Time,
     Date,
+
     Boolean,
+
     Json,
     JsonBinary,
+
     Uuid,
+
     Array(Arc<ColumnType>),
 }
 
@@ -233,21 +361,57 @@ pub enum GeneratedColumnKind {
 
 pub(crate) fn write_column_type<W: SqlWriter>(w: &mut W, column_type: &ColumnType) {
     match column_type {
+        ColumnType::Char(size) => {
+            w.push_str("char(");
+            w.push_str(&size.to_string());
+            w.push_str(")");
+        }
+        ColumnType::Varchar(size) => {
+            w.push_str("varchar(");
+            w.push_str(&size.to_string());
+            w.push_str(")");
+        }
         ColumnType::Text => w.push_str("text"),
+
+        ColumnType::Bytea => w.push_str("bytea"),
+
         ColumnType::SmallInt => w.push_str("smallint"),
         ColumnType::Int => w.push_str("integer"),
         ColumnType::BigInt => w.push_str("bigint"),
         ColumnType::Float => w.push_str("real"),
         ColumnType::Double => w.push_str("double precision"),
+        ColumnType::Numeric(p, s) => {
+            w.push_str("numeric(");
+            w.push_str(&p.to_string());
+            w.push_str(", ");
+            w.push_str(&s.to_string());
+            w.push_str(")");
+        }
+
+        ColumnType::SmallSerial => w.push_str("smallserial"),
+        ColumnType::Serial => w.push_str("serial"),
+        ColumnType::BigSerial => w.push_str("bigserial"),
+
+        ColumnType::Int4Range => w.push_str("int4range"),
+        ColumnType::Int8Range => w.push_str("int8range"),
+        ColumnType::NumRange => w.push_str("numrange"),
+        ColumnType::TsRange => w.push_str("tsrange"),
+        ColumnType::TsTzRange => w.push_str("tstzrange"),
+        ColumnType::DateRange => w.push_str("daterange"),
+
         ColumnType::DateTime => w.push_str("timestamp without time zone"),
         ColumnType::Timestamp => w.push_str("timestamp"),
         ColumnType::TimestampWithTimeZone => w.push_str("timestamp with time zone"),
         ColumnType::Time => w.push_str("time"),
         ColumnType::Date => w.push_str("date"),
+
         ColumnType::Boolean => w.push_str("bool"),
+
         ColumnType::Json => w.push_str("json"),
         ColumnType::JsonBinary => w.push_str("jsonb"),
+
         ColumnType::Uuid => w.push_str("uuid"),
+
         ColumnType::Array(ty) => {
             write_column_type(w, ty);
             w.push_str("[]");
