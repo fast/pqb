@@ -41,6 +41,12 @@ impl ColumnDef {
         }
     }
 
+    /// Set default value for the column.
+    pub fn default(mut self, expr: Expr) -> Self {
+        self.spec.default = Some(expr);
+        self
+    }
+
     /// Set column not null
     pub fn not_null(mut self) -> Self {
         self.spec.nullable = Some(false);
@@ -132,10 +138,16 @@ impl ColumnDef {
     }
 
     /// Set column as generated with expression and stored storage.
+    ///
+    /// ## Panics
+    /// This method will panic if the column has a default value set.
     pub fn generated_as_stored<E>(mut self, expr: E) -> Self
     where
         E: Into<Expr>,
     {
+        if self.spec.default.is_some() {
+            panic!("A generated column cannot have a default value.");
+        }
         self.spec.generated = Some(GeneratedColumn {
             expr: expr.into(),
             kind: GeneratedColumnKind::Stored,
@@ -144,10 +156,19 @@ impl ColumnDef {
     }
 
     /// Set column as generated with expression and virtual storage.
+    ///
+    /// ## Notice
+    /// Before PostgreSQL 18, STORED is the only supported kind and must be specified.
+    ///
+    /// ## Panics
+    /// This method will panic if the column has a default value set.
     pub fn generated_as_virtual<E>(mut self, expr: E) -> Self
     where
         E: Into<Expr>,
     {
+        if self.spec.default.is_some() {
+            panic!("A generated column cannot have a default value.");
+        }
         self.spec.generated = Some(GeneratedColumn {
             expr: expr.into(),
             kind: GeneratedColumnKind::Virtual,

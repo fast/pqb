@@ -80,3 +80,17 @@ fn create_table_generated_column() {
         @r#"CREATE TABLE "calc" ( "a" integer, "b" integer, "sum" integer GENERATED ALWAYS AS ("a" + "b") STORED, "avg" integer GENERATED ALWAYS AS ("sum" / 2) VIRTUAL )"#
     );
 }
+
+#[test]
+#[should_panic(expected = "A generated column cannot have a default value.")]
+fn create_table_generated_column_with_default_should_panic() {
+    let _ = CreateTable::new()
+        .table("bad_table")
+        .column(
+            ColumnDef::new("bad_column")
+                .int()
+                .default(Expr::value(10))
+                .generated_as_stored(Expr::column("bad_column").add(Expr::value(5))),
+        )
+        .to_sql();
+}
