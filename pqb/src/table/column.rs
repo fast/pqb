@@ -42,6 +42,9 @@ impl ColumnDef {
     }
 
     /// Set default value for the column.
+    ///
+    /// ## Panics
+    /// This method will panic if the column is a generated column.
     pub fn default(mut self, expr: Expr) -> Self {
         if self.spec.generated.is_some() {
             panic!("A generated column cannot have a default value.");
@@ -63,13 +66,27 @@ impl ColumnDef {
     }
 
     /// Set column type as char with length.
+    ///
+    /// ## Panics
+    /// This method will panic if the `size` is zero.
     pub fn char(mut self, size: u32) -> Self {
+        if size == 0 {
+            panic!("Character type size must be greater than zero.");
+        }
+
         self.ty = Some(ColumnType::Char(size));
         self
     }
 
     /// Set column type as varchar with length.
+    ///
+    /// ## Panics
+    /// This method will panic if the `size` is zero.
     pub fn varchar(mut self, size: u32) -> Self {
+        if size == 0 {
+            panic!("Character type size must be greater than zero.");
+        }
+
         self.ty = Some(ColumnType::Varchar(size));
         self
     }
@@ -117,8 +134,21 @@ impl ColumnDef {
     }
 
     /// Set column type as numeric with precision and scale.
-    pub fn numeric(mut self, precision: u32, scale: u32) -> Self {
-        self.ty = Some(ColumnType::Numeric(precision, scale));
+    pub fn numeric(mut self, precision: i32, scale: i32) -> Self {
+        if scale > precision {
+            panic!("Numeric scale cannot be greater than precision.");
+        }
+        if precision > 1000 {
+            panic!("Numeric precision cannot be greater than 1000.");
+        }
+
+        self.ty = Some(ColumnType::Numeric(Some((precision, scale))));
+        self
+    }
+
+    /// Set column type as unbounded numeric.
+    pub fn numeric_unbounded(mut self) -> Self {
+        self.ty = Some(ColumnType::Numeric(None));
         self
     }
 
@@ -295,8 +325,8 @@ pub enum ColumnType {
     BigInt,
     Float,
     Double,
-    /// NUMERIC(prec, scale)
-    Numeric(u32, u32),
+    /// NUMERIC(prec, scale)/NUMERIC
+    Numeric(Option<(i32, i32)>),
 
     // Range types
     Int4Range,
@@ -380,12 +410,15 @@ pub(crate) fn write_column_type<W: SqlWriter>(w: &mut W, column_type: &ColumnTyp
         ColumnType::BigInt => w.push_str("bigint"),
         ColumnType::Float => w.push_str("real"),
         ColumnType::Double => w.push_str("double precision"),
-        ColumnType::Numeric(p, s) => {
+        ColumnType::Numeric(Some((p, s))) => {
             w.push_str("numeric(");
             w.push_str(&p.to_string());
             w.push_str(", ");
             w.push_str(&s.to_string());
             w.push_str(")");
+        }
+        ColumnType::Numeric(None) => {
+            w.push_str("numeric");
         }
 
         ColumnType::SmallSerial => w.push_str("smallserial"),
