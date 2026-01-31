@@ -41,6 +41,12 @@ impl ColumnDef {
         }
     }
 
+    /// Set default value for the column.
+    pub fn default(mut self, expr: Expr) -> Self {
+        self.spec.default = Some(expr);
+        self
+    }
+
     /// Set column not null
     pub fn not_null(mut self) -> Self {
         self.spec.nullable = Some(false);
@@ -130,6 +136,45 @@ impl ColumnDef {
         self.ty = Some(ColumnType::Uuid);
         self
     }
+
+    /// Set column as generated with expression and stored storage.
+    ///
+    /// ## Panics
+    /// This method will panic if the column has a default value set.
+    pub fn generated_as_stored<E>(mut self, expr: E) -> Self
+    where
+        E: Into<Expr>,
+    {
+        if self.spec.default.is_some() {
+            panic!("A generated column cannot have a default value.");
+        }
+        self.spec.generated = Some(GeneratedColumn {
+            expr: expr.into(),
+            kind: GeneratedColumnKind::Stored,
+        });
+        self
+    }
+
+    /// Set column as generated with expression and virtual storage.
+    ///
+    /// ## Notice
+    /// Before PostgreSQL 18, STORED is the only supported kind and must be specified.
+    ///
+    /// ## Panics
+    /// This method will panic if the column has a default value set.
+    pub fn generated_as_virtual<E>(mut self, expr: E) -> Self
+    where
+        E: Into<Expr>,
+    {
+        if self.spec.default.is_some() {
+            panic!("A generated column cannot have a default value.");
+        }
+        self.spec.generated = Some(GeneratedColumn {
+            expr: expr.into(),
+            kind: GeneratedColumnKind::Virtual,
+        });
+        self
+    }
 }
 
 /// Column data types.
@@ -162,8 +207,28 @@ pub enum ColumnType {
 pub struct ColumnSpec {
     pub nullable: Option<bool>,
     pub default: Option<Expr>,
+    pub generated: Option<GeneratedColumn>,
     pub unique: bool,
     pub primary_key: bool,
+}
+
+/// Generated column specification.
+#[derive(Debug, Clone)]
+#[non_exhaustive]
+#[expect(missing_docs)]
+pub struct GeneratedColumn {
+    pub expr: Expr,
+    /// Before PostgreSQL 18, STORED is the only supported kind and must be specified.
+    pub kind: GeneratedColumnKind,
+}
+
+/// Generated column storage kind.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
+#[expect(missing_docs)]
+pub enum GeneratedColumnKind {
+    Stored,
+    Virtual,
 }
 
 pub(crate) fn write_column_type<W: SqlWriter>(w: &mut W, column_type: &ColumnType) {
@@ -194,6 +259,7 @@ pub(crate) fn write_column_spec<W: SqlWriter>(w: &mut W, column_spec: &ColumnSpe
     let ColumnSpec {
         nullable,
         default,
+        generated,
         unique,
         primary_key,
     } = column_spec;
@@ -212,6 +278,16 @@ pub(crate) fn write_column_spec<W: SqlWriter>(w: &mut W, column_spec: &ColumnSpe
                 w.push_str(")");
             }
         }
+    }
+
+    if let Some(generated) = generated {
+        w.push_str(" GENERATED ALWAYS AS (");
+        write_expr(w, &generated.expr);
+        w.push_str(")");
+        w.push_str(match generated.kind {
+            GeneratedColumnKind::Stored => " STORED",
+            GeneratedColumnKind::Virtual => " VIRTUAL",
+        });
     }
 
     if *primary_key {
