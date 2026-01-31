@@ -134,9 +134,18 @@ impl ColumnDef {
     }
 
     /// Set column type as numeric with precision and scale.
+    ///
+    /// ## Panics
+    /// This method will panic if:
+    /// - `scale` is greater than `precision`,
+    /// - `precision` is less than or equal to zero,
+    /// - `precision` is greater than 1000.
     pub fn numeric(mut self, precision: i32, scale: i32) -> Self {
         if scale > precision {
             panic!("Numeric scale cannot be greater than precision.");
+        }
+        if precision <= 0 {
+            panic!("Numeric precision must be greater than zero.");
         }
         if precision > 1000 {
             panic!("Numeric precision cannot be greater than 1000.");
