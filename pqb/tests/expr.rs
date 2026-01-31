@@ -17,6 +17,20 @@ use pqb::expr::Expr;
 use pqb::query::Select;
 
 #[test]
+fn select_function() {
+    assert_snapshot!(
+        Select::new()
+            .expr(Expr::function("int8range", [
+                Expr::value(1),
+                Expr::value(10),
+                Expr::value("[]"),
+            ]))
+            .to_sql(),
+        @"SELECT int8range(1, 10, '[]')"
+    );
+}
+
+#[test]
 fn select_range_ops() {
     let left = Expr::column("r1");
     let right = Expr::column("r2");

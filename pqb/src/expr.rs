@@ -76,6 +76,16 @@ impl Expr {
         Expr::Column(col.into_column_ref())
     }
 
+    /// Express a function call with custom name and arguments.
+    pub fn function<N, T, I>(name: N, args: I) -> Self
+    where
+        N: Into<Cow<'static, str>>,
+        I: IntoIterator<Item = T>,
+        T: Into<Expr>,
+    {
+        Expr::FunctionCall(FunctionCall::custom(name, args))
+    }
+
     /// Express the asterisk (*) without table prefix.
     pub fn asterisk() -> Self {
         Expr::Asterisk

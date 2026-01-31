@@ -14,6 +14,8 @@
 
 //! SQL built-in functions.
 
+use std::borrow::Cow;
+
 use crate::expr::BinaryOp;
 use crate::expr::Expr;
 use crate::expr::write_expr;
@@ -21,7 +23,7 @@ use crate::types::IntoColumnRef;
 use crate::types::IntoIden;
 use crate::writer::SqlWriter;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 enum Func {
     Max,
     Min,
@@ -32,6 +34,7 @@ enum Func {
     Coalesce,
     Lower,
     Upper,
+    Custom(Cow<'static, str>),
 }
 
 /// A function call expression.
@@ -151,6 +154,19 @@ impl FunctionCall {
             args: vec![expr.binary(BinaryOp::As, Expr::custom(iden.into_iden().into_inner()))],
         }
     }
+
+    /// Create a function call with custom name and arguments.
+    pub fn custom<N, T, I>(name: N, args: I) -> Self
+    where
+        N: Into<Cow<'static, str>>,
+        I: IntoIterator<Item = T>,
+        T: Into<Expr>,
+    {
+        Self {
+            func: Func::Custom(name.into()),
+            args: args.into_iter().map(|arg| arg.into()).collect(),
+        }
+    }
 }
 
 impl From<FunctionCall> for Expr {
@@ -160,7 +176,7 @@ impl From<FunctionCall> for Expr {
 }
 
 pub(crate) fn write_function_call<W: SqlWriter>(w: &mut W, call: &FunctionCall) {
-    match call.func {
+    match &call.func {
         Func::Max => w.push_str("MAX"),
         Func::Min => w.push_str("MIN"),
         Func::Sum => w.push_str("SUM"),
@@ -170,6 +186,7 @@ pub(crate) fn write_function_call<W: SqlWriter>(w: &mut W, call: &FunctionCall) 
         Func::Coalesce => w.push_str("COALESCE"),
         Func::Lower => w.push_str("LOWER"),
         Func::Upper => w.push_str("UPPER"),
+        Func::Custom(name) => w.push_str(name),
     }
     w.push_char('(');
     for (i, arg) in call.args.iter().enumerate() {
