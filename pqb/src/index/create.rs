@@ -179,7 +179,7 @@ impl CreateIndex {
     }
 
     /// Set the predicate for a partial index.
-    pub fn where_<E>(mut self, expr: E) -> Self
+    pub fn index_where<E>(mut self, expr: E) -> Self
     where
         E: Into<Expr>,
     {

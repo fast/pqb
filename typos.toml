@@ -16,6 +16,4 @@
 "Buil" = "Buil"
 
 [files]
-extend-exclude = [
-    "brin"
-]
+extend-exclude = ["brin"]

@@ -130,7 +130,7 @@ fn create_index_partial() {
             .name("idx_sessions_active")
             .table("sessions")
             .column("user_id")
-            .where_(Expr::column("expires_at").gt(Expr::current_timestamp()))
+            .index_where(Expr::column("expires_at").gt(Expr::current_timestamp()))
             .to_sql(),
         @r#"CREATE INDEX "idx_sessions_active" ON "sessions" ("user_id") WHERE "expires_at" > CURRENT_TIMESTAMP"#
     );
