@@ -56,7 +56,7 @@ fn create_table_primary_key_index() {
             .column(ColumnDef::new("name").text())
             .primary_key(CreateIndex::new().column("id"))
             .to_sql(),
-        @r#"CREATE TABLE "widgets" ( "id" integer, "name" text, PRIMARY KEY ("id") )"#
+        @r#"CREATE TABLE "widgets" ( "id" integer, "name" text, PRIMARY KEY (("id")) )"#
     );
 }
 

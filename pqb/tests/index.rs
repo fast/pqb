@@ -26,7 +26,7 @@ fn create_index_gist_with_options() {
             .with_option("fillfactor", 80)
             .with_option("buffering", "auto")
             .to_sql(),
-        @r#"CREATE INDEX ON "spatial" USING gist ("geom") WITH ("fillfactor" = 80, "buffering" = 'auto')"#
+        @r#"CREATE INDEX ON "spatial" USING gist (("geom")) WITH ("fillfactor" = 80, "buffering" = 'auto')"#
     );
 }
 
@@ -39,7 +39,7 @@ fn create_index_brin_with_options() {
             .brin()
             .with_options([("pages_per_range", Expr::value(32)), ("autosummarize", Expr::value(true))])
             .to_sql(),
-        @r#"CREATE INDEX ON "events" USING brin ("created_at") WITH ("pages_per_range" = 32, "autosummarize" = TRUE)"#
+        @r#"CREATE INDEX ON "events" USING brin (("created_at")) WITH ("pages_per_range" = 32, "autosummarize" = TRUE)"#
     );
 }
 
@@ -51,7 +51,7 @@ fn create_index_hash() {
             .column("value")
             .hash()
             .to_sql(),
-        @r#"CREATE INDEX ON "tokens" USING hash ("value")"#
+        @r#"CREATE INDEX ON "tokens" USING hash (("value"))"#
     );
 }
 
@@ -63,7 +63,7 @@ fn create_index_named() {
             .table("tokens")
             .column("value")
             .to_sql(),
-        @r#"CREATE INDEX "idx_tokens_value" ON "tokens" ("value")"#
+        @r#"CREATE INDEX "idx_tokens_value" ON "tokens" (("value"))"#
     );
 }
 
@@ -77,7 +77,7 @@ fn create_index_if_not_exists_named() {
             .brin()
             .if_not_exists()
             .to_sql(),
-        @r#"CREATE INDEX IF NOT EXISTS "idx_events_created_at_brin" ON "events" USING brin ("created_at")"#
+        @r#"CREATE INDEX IF NOT EXISTS "idx_events_created_at_brin" ON "events" USING brin (("created_at"))"#
     );
 }
 
@@ -92,7 +92,7 @@ fn create_index_named_with_options() {
             .with_option("fillfactor", 90)
             .with_option("buffering", "auto")
             .to_sql(),
-        @r#"CREATE INDEX "idx_spatial_geom_gist" ON "spatial" USING gist ("geom") WITH ("fillfactor" = 90, "buffering" = 'auto')"#
+        @r#"CREATE INDEX "idx_spatial_geom_gist" ON "spatial" USING gist (("geom")) WITH ("fillfactor" = 90, "buffering" = 'auto')"#
     );
 }
 
@@ -106,7 +106,7 @@ fn create_index_if_not_exists_custom_method() {
             .if_not_exists()
             .using("hnsw")
             .to_sql(),
-        @r#"CREATE INDEX IF NOT EXISTS "idx_tokens_value_hnsw" ON "tokens" USING hnsw ("value")"#
+        @r#"CREATE INDEX IF NOT EXISTS "idx_tokens_value_hnsw" ON "tokens" USING hnsw (("value"))"#
     );
 }
 
@@ -119,7 +119,7 @@ fn create_index_include_columns() {
             .column("customer_id")
             .include_columns(["id", "created_at"])
             .to_sql(),
-        @r#"CREATE INDEX "idx_orders_customer" ON "orders" ("customer_id") INCLUDE ("id", "created_at")"#
+        @r#"CREATE INDEX "idx_orders_customer" ON "orders" (("customer_id")) INCLUDE ("id", "created_at")"#
     );
 }
 
@@ -132,7 +132,30 @@ fn create_index_partial() {
             .column("user_id")
             .index_where(Expr::column("expires_at").gt(Expr::current_timestamp()))
             .to_sql(),
-        @r#"CREATE INDEX "idx_sessions_active" ON "sessions" ("user_id") WHERE "expires_at" > CURRENT_TIMESTAMP"#
+        @r#"CREATE INDEX "idx_sessions_active" ON "sessions" (("user_id")) WHERE "expires_at" > CURRENT_TIMESTAMP"#
+    );
+}
+
+#[test]
+fn create_index_expression() {
+    assert_snapshot!(
+        CreateIndex::new()
+            .table("users")
+            .expr(Expr::function("lower", [Expr::column("email")]))
+            .to_sql(),
+        @r#"CREATE INDEX ON "users" ((lower("email")))"#
+    );
+}
+
+#[test]
+fn create_index_expression_with_column() {
+    assert_snapshot!(
+        CreateIndex::new()
+            .table("metrics")
+            .expr(Expr::column("value").add(Expr::value(1)))
+            .column("created_at")
+            .to_sql(),
+        @r#"CREATE INDEX ON "metrics" (("value" + 1), ("created_at"))"#
     );
 }
 
@@ -146,6 +169,6 @@ fn create_index_concurrently() {
             .concurrently()
             .if_not_exists()
             .to_sql(),
-        @r#"CREATE INDEX CONCURRENTLY IF NOT EXISTS "idx_orders_customer" ON "orders" ("customer_id")"#
+        @r#"CREATE INDEX CONCURRENTLY IF NOT EXISTS "idx_orders_customer" ON "orders" (("customer_id"))"#
     );
 }
