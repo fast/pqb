@@ -12,14 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//! Table definition and alternations statements.
+//! Schema definition statements.
 
-mod alter;
-mod column;
-mod create;
 mod drop;
 
-pub use self::alter::*;
-pub use self::column::*;
-pub use self::create::*;
 pub use self::drop::*;

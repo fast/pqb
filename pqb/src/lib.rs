@@ -33,6 +33,7 @@ pub mod expr;
 pub mod func;
 pub mod index;
 pub mod query;
+pub mod schema;
 pub mod table;
 pub mod types;
 pub mod value;

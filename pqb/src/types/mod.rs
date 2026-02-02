@@ -259,6 +259,15 @@ pub enum JoinType {
     InnerJoin,
 }
 
+/// Drop behavior for DROP statements.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DropBehavior {
+    /// Drop dependent objects too.
+    Cascade,
+    /// Refuse to drop if there are dependent objects.
+    Restrict,
+}
+
 pub(crate) fn write_iden<W: SqlWriter>(w: &mut W, iden: &Iden) {
     // PostgreSQL uses double quotes for quoting identifiers.
     // @see https://www.postgresql.org/docs/18/sql-syntax-lexical.html#SQL-SYNTAX-IDENTIFIERS
