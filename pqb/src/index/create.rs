@@ -321,7 +321,15 @@ fn write_index_columns<W: SqlWriter>(w: &mut W, columns: &[Expr]) {
         if i > 0 {
             w.push_str(", ");
         }
-        write_tuple(w, std::slice::from_ref(col));
+        match col {
+            // Wrap opclass expressions in parentheses for disambiguation
+            Expr::Binary(_, _, _) | Expr::Unary(_, _) => {
+                write_tuple(w, std::slice::from_ref(col));
+            }
+            _ => {
+                write_expr(w, col);
+            }
+        }
     }
     w.push_str(")");
 }
