@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//! Index definition and alternations statements.
+//! Index definition and alterations statements.
 
 mod create;
 mod drop;
