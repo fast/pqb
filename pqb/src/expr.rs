@@ -673,7 +673,7 @@ fn write_binary_op<W: SqlWriter>(w: &mut W, op: &BinaryOp) {
     })
 }
 
-fn write_tuple<W: SqlWriter>(w: &mut W, exprs: &[Expr]) {
+pub(crate) fn write_tuple<W: SqlWriter>(w: &mut W, exprs: &[Expr]) {
     w.push_char('(');
     for (i, expr) in exprs.iter().enumerate() {
         if i != 0 {

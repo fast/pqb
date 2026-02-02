@@ -17,6 +17,7 @@ use std::borrow::Cow;
 use crate::SqlWriterValues;
 use crate::expr::Expr;
 use crate::expr::write_expr;
+use crate::expr::write_tuple;
 use crate::types::Iden;
 use crate::types::IntoIden;
 use crate::types::TableRef;
@@ -33,7 +34,7 @@ pub struct CreateIndex {
     primary: bool,
     unique: bool,
     name: Option<Iden>,
-    columns: Vec<Iden>,
+    columns: Vec<Expr>,
     include_columns: Vec<Iden>,
     method: Option<IndexMethod>,
     options: Vec<IndexOption>,
@@ -83,7 +84,16 @@ impl CreateIndex {
     where
         T: IntoIden,
     {
-        self.columns.push(column.into_iden());
+        self.columns.push(Expr::column(column.into_iden()));
+        self
+    }
+
+    /// Add an expression to the index.
+    pub fn expr<E>(mut self, expr: E) -> Self
+    where
+        E: Into<Expr>,
+    {
+        self.columns.push(expr.into());
         self
     }
 
@@ -305,13 +315,21 @@ pub(crate) fn write_table_index<W: SqlWriter>(w: &mut W, index: &CreateIndex) {
     write_index_options(w, &index.options);
 }
 
-fn write_index_columns<W: SqlWriter>(w: &mut W, columns: &[Iden]) {
+fn write_index_columns<W: SqlWriter>(w: &mut W, columns: &[Expr]) {
     w.push_str("(");
     for (i, col) in columns.iter().enumerate() {
         if i > 0 {
             w.push_str(", ");
         }
-        write_iden(w, col);
+        match col {
+            // Wrap opclass expressions in parentheses for disambiguation
+            Expr::Binary(_, _, _) | Expr::Unary(_, _) => {
+                write_tuple(w, std::slice::from_ref(col));
+            }
+            _ => {
+                write_expr(w, col);
+            }
+        }
     }
     w.push_str(")");
 }

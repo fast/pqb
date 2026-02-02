@@ -137,6 +137,29 @@ fn create_index_partial() {
 }
 
 #[test]
+fn create_index_expression() {
+    assert_snapshot!(
+        CreateIndex::new()
+            .table("users")
+            .expr(Expr::function("lower", [Expr::column("email")]))
+            .to_sql(),
+        @r#"CREATE INDEX ON "users" (lower("email"))"#
+    );
+}
+
+#[test]
+fn create_index_expression_with_column() {
+    assert_snapshot!(
+        CreateIndex::new()
+            .table("metrics")
+            .expr(Expr::column("value").add(Expr::value(1)))
+            .column("created_at")
+            .to_sql(),
+        @r#"CREATE INDEX ON "metrics" (("value" + 1), "created_at")"#
+    );
+}
+
+#[test]
 fn create_index_concurrently() {
     assert_snapshot!(
         CreateIndex::new()
