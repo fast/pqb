@@ -12,12 +12,16 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+mod common;
+
 use insta::assert_snapshot;
 use pqb::expr::Expr;
 use pqb::index::CreateIndex;
 use pqb::table::ColumnDef;
 use pqb::table::ColumnType;
 use pqb::table::CreateTable;
+
+use crate::common::ValidateSQL;
 
 #[test]
 fn create_table_basic() {
@@ -28,7 +32,8 @@ fn create_table_basic() {
             .column(ColumnDef::new("email").text().not_null())
             .column(ColumnDef::new("nickname").text().null())
             .column(ColumnDef::new("created_at").timestamp_with_time_zone())
-            .to_sql(),
+            .to_sql()
+            .validate(),
         @r#"CREATE TABLE "users" ( "id" bigint NOT NULL, "email" text NOT NULL, "nickname" text NULL, "created_at" timestamp with time zone )"#
     );
 }
@@ -42,7 +47,8 @@ fn create_table_if_not_exists_temporary() {
             .table("cache")
             .column(ColumnDef::new("key").text().not_null())
             .column(ColumnDef::new("value").json_binary())
-            .to_sql(),
+            .to_sql()
+            .validate(),
         @r#"CREATE TEMPORARY TABLE IF NOT EXISTS "cache" ( "key" text NOT NULL, "value" jsonb )"#
     );
 }
@@ -55,7 +61,8 @@ fn create_table_primary_key_index() {
             .column(ColumnDef::new("id").int())
             .column(ColumnDef::new("name").text())
             .primary_key(CreateIndex::new().column("id"))
-            .to_sql(),
+            .to_sql()
+            .validate(),
         @r#"CREATE TABLE "widgets" ( "id" integer, "name" text, PRIMARY KEY ("id") )"#
     );
 }
@@ -77,7 +84,8 @@ fn create_table_generated_column() {
                     .int()
                     .generated_as_virtual(Expr::column("sum").div(Expr::value(2))),
             )
-            .to_sql(),
+            .to_sql()
+            .validate(),
         @r#"CREATE TABLE "calc" ( "a" integer, "b" integer, "sum" integer GENERATED ALWAYS AS ("a" + "b") STORED, "avg" integer GENERATED ALWAYS AS ("sum" / 2) VIRTUAL )"#
     );
 }
@@ -116,7 +124,8 @@ fn create_table_all_column_types() {
             .column(ColumnDef::new("col_jsonb").json_binary())
             .column(ColumnDef::new("col_uuid").uuid())
             .column(ColumnDef::new("col_int_array").array_of(ColumnType::Int))
-            .to_sql(),
+            .to_sql()
+            .validate(),
         @r#"CREATE TABLE "all_types" ( "col_char" char(4), "col_varchar" varchar(10), "col_text" text, "col_bytea" bytea, "col_smallint" smallint, "col_int" integer, "col_bigint" bigint, "col_float" real, "col_double" double precision, "col_numeric" numeric(10, 2), "col_smallserial" smallserial, "col_serial" serial, "col_bigserial" bigserial, "col_int4range" int4range, "col_int8range" int8range, "col_numrange" numrange, "col_tsrange" tsrange, "col_tstzrange" tstzrange, "col_daterange" daterange, "col_datetime" timestamp without time zone, "col_timestamp" timestamp, "col_timestamptz" timestamp with time zone, "col_time" time, "col_date" date, "col_bool" bool, "col_json" json, "col_jsonb" jsonb, "col_uuid" uuid, "col_int_array" integer[] )"#
     );
 }

@@ -12,10 +12,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+mod common;
+
 use insta::assert_snapshot;
 use pqb::index::DropIndex;
 use pqb::schema::DropSchema;
 use pqb::table::DropTable;
+
+use crate::common::ValidateSQL;
 
 #[test]
 fn drop_index_sql() {
@@ -25,7 +29,8 @@ fn drop_index_sql() {
             .if_exists()
             .concurrently()
             .cascade()
-            .to_sql(),
+            .to_sql()
+            .validate(),
         @r#"DROP INDEX CONCURRENTLY IF EXISTS "public"."idx_users_email" CASCADE"#
     );
 }
@@ -37,7 +42,8 @@ fn drop_table_sql() {
             .tables([("public", "users"), ("public", "accounts")])
             .if_exists()
             .restrict()
-            .to_sql(),
+            .to_sql()
+            .validate(),
         @r#"DROP TABLE IF EXISTS "public"."users", "public"."accounts" RESTRICT"#
     );
 }
@@ -49,7 +55,8 @@ fn drop_schema_sql() {
             .schemas(["public", "analytics"])
             .if_exists()
             .cascade()
-            .to_sql(),
+            .to_sql()
+            .validate(),
         @r#"DROP SCHEMA IF EXISTS "public", "analytics" CASCADE"#
     );
 }
