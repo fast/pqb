@@ -12,6 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+mod common;
+
 use insta::assert_compact_debug_snapshot;
 use insta::assert_snapshot;
 use pqb::expr::Expr;
@@ -19,15 +21,18 @@ use pqb::query::Order;
 use pqb::query::Select;
 use pqb::types::Asterisk;
 
+use crate::common::ValidateSQL;
+
 #[test]
 fn select_0() {
-    assert_snapshot!(Select::new().expr(Expr::value(1)).to_sql(), @"SELECT 1");
+    assert_snapshot!(Select::new().expr(Expr::value(1)).to_sql().validate(), @"SELECT 1");
     assert_snapshot!(
         Select::new()
             .expr(Expr::column("n"))
             .from("tbl")
             .and_where(Expr::column("region").eq(Expr::value("CN")))
-            .to_sql(),
+            .to_sql()
+            .validate(),
         @r#"SELECT "n" FROM "tbl" WHERE "region" = 'CN'"#
     );
 }
@@ -40,7 +45,8 @@ fn select_1() {
             .from("character")
             .limit(10)
             .offset(100)
-            .to_sql(),
+            .to_sql()
+            .validate(),
         @r#"SELECT "character", "size_w", "size_h" FROM "character" LIMIT 10 OFFSET 100"#
     );
 }
@@ -52,7 +58,8 @@ fn select_2() {
             .columns(["character", "size_w", "size_h"])
             .from("character")
             .and_where(Expr::column("size_w").eq(3))
-            .to_sql(),
+            .to_sql()
+            .validate(),
         @r#"SELECT "character", "size_w", "size_h" FROM "character" WHERE "size_w" = 3"#
     );
 }
@@ -65,7 +72,8 @@ fn select_3() {
             .from("character")
             .and_where(Expr::column("size_w").eq(3))
             .and_where(Expr::column("size_h").eq(4))
-            .to_sql(),
+            .to_sql()
+            .validate(),
         @r#"SELECT "character", "size_w", "size_h" FROM "character" WHERE "size_w" = 3 AND "size_h" = 4"#
     );
 }
@@ -79,7 +87,8 @@ fn select_4() {
                 Select::new().columns(["image", "aspect"]).from("glyph"),
                 "subglyph",
             )
-            .to_sql(),
+            .to_sql()
+            .validate(),
         @r#"SELECT "aspect" FROM (SELECT "image", "aspect" FROM "glyph") AS "subglyph""#
     );
 }
@@ -91,7 +100,8 @@ fn select_5() {
             .column(("glyph", "image"))
             .from("glyph")
             .and_where(Expr::column(("glyph", "aspect")).is_in([3, 4]))
-            .to_sql(),
+            .to_sql()
+            .validate(),
         @r#"SELECT "glyph"."image" FROM "glyph" WHERE "glyph"."aspect" IN (3, 4)"#
     );
 }
@@ -105,7 +115,8 @@ fn select_6() {
             .from("glyph")
             .group_by_columns(["aspect"])
             .and_having(Expr::column("aspect").gt(2))
-            .to_sql(),
+            .to_sql()
+            .validate(),
         @r#"SELECT "aspect", MAX("image") FROM "glyph" GROUP BY "aspect" HAVING "aspect" > 2"#
     );
 }
@@ -117,7 +128,8 @@ fn select_7() {
             .column("aspect")
             .from("glyph")
             .and_where(Expr::column("aspect").if_null(0).gt(2))
-            .to_sql(),
+            .to_sql()
+            .validate(),
         @r#"SELECT "aspect" FROM "glyph" WHERE COALESCE("aspect", 0) > 2"#
     );
 }
@@ -132,7 +144,8 @@ fn select_8() {
                 "font",
                 Expr::column(("character", "font_id")).eq(Expr::column(("font", "id"))),
             )
-            .to_sql(),
+            .to_sql()
+            .validate(),
         @r#"SELECT "character" FROM "character" LEFT JOIN "font" ON "character"."font_id" = "font"."id""#
     );
 }
@@ -151,7 +164,8 @@ fn select_9() {
                 "glyph",
                 Expr::column(("character", "character")).eq(Expr::column(("glyph", "image"))),
             )
-            .to_sql(),
+            .to_sql()
+            .validate(),
         @r#"SELECT "character" FROM "character" LEFT JOIN "font" ON "character"."font_id" = "font"."id" INNER JOIN "glyph" ON "character"."character" = "glyph"."image""#
     );
 }
@@ -168,7 +182,8 @@ fn select_10() {
                     .eq(Expr::column(("font", "id")))
                     .and(Expr::column(("character", "font_id")).eq(Expr::column(("font", "id")))),
             )
-            .to_sql(),
+            .to_sql()
+            .validate(),
         @r#"SELECT "character" FROM "character" LEFT JOIN "font" ON "character"."font_id" = "font"."id" AND "character"."font_id" = "font"."id""#
     );
 }
@@ -184,7 +199,8 @@ fn select_11() {
                 Order::column("image").desc(),
                 Order::column(("glyph", "aspect")).asc()
             ])
-            .to_sql(),
+            .to_sql()
+            .validate(),
         @r#"SELECT "aspect" FROM "glyph" WHERE COALESCE("aspect", 0) > 2 ORDER BY "image" DESC, "glyph"."aspect" ASC"#
     );
 }
@@ -197,7 +213,8 @@ fn select_12() {
             .from("glyph")
             .and_where(Expr::column("aspect").if_null(0).gt(2))
             .order_by([Order::column("id"), Order::column("aspect").desc()])
-            .to_sql(),
+            .to_sql()
+            .validate(),
         @r#"SELECT "aspect" FROM "glyph" WHERE COALESCE("aspect", 0) > 2 ORDER BY "id" ASC, "aspect" DESC"#
     );
 }
@@ -213,7 +230,8 @@ fn select_13() {
                 Order::column(("glyph", "id")),
                 Order::column(("glyph", "aspect")).desc(),
             ])
-            .to_sql(),
+            .to_sql()
+            .validate(),
         @r#"SELECT "aspect" FROM "glyph" WHERE COALESCE("aspect", 0) > 2 ORDER BY "glyph"."id" ASC, "glyph"."aspect" DESC"#
     );
 }
@@ -227,7 +245,8 @@ fn select_14() {
             .from("glyph")
             .group_by_columns([("glyph", "id"), ("glyph", "aspect")])
             .and_having(Expr::column("aspect").gt(2))
-            .to_sql(),
+            .to_sql()
+            .validate(),
         @r#"SELECT "id", "aspect", MAX("image") FROM "glyph" GROUP BY "glyph"."id", "glyph"."aspect" HAVING "aspect" > 2"#
     );
 }
@@ -239,7 +258,8 @@ fn select_15() {
             .column("character")
             .from("character")
             .and_where(Expr::column("font_id").is_null())
-            .to_sql(),
+            .to_sql()
+            .validate(),
         @r#"SELECT "character" FROM "character" WHERE "font_id" IS NULL"#
     );
 }
@@ -252,7 +272,8 @@ fn select_16() {
             .from("character")
             .and_where(Expr::column("font_id").is_null())
             .and_where(Expr::column("character").is_not_null())
-            .to_sql(),
+            .to_sql()
+            .validate(),
         @r#"SELECT "character" FROM "character" WHERE "font_id" IS NULL AND "character" IS NOT NULL"#
     );
 }
@@ -264,7 +285,8 @@ fn select_17() {
             .column(("glyph", "image"))
             .from("glyph")
             .and_where(Expr::column(("glyph", "aspect")).between(3, 5))
-            .to_sql(),
+            .to_sql()
+            .validate(),
         @r#"SELECT "glyph"."image" FROM "glyph" WHERE "glyph"."aspect" BETWEEN 3 AND 5"#
     );
 }
@@ -277,7 +299,8 @@ fn select_18() {
             .from("glyph")
             .and_where(Expr::column("aspect").between(3, 5))
             .and_where(Expr::column("aspect").not_between(8, 10))
-            .to_sql(),
+            .to_sql()
+            .validate(),
         @r#"SELECT "aspect" FROM "glyph" WHERE ("aspect" BETWEEN 3 AND 5) AND ("aspect" NOT BETWEEN 8 AND 10)"#
     );
 }
@@ -289,7 +312,8 @@ fn select_19() {
             .column("character")
             .from("character")
             .and_where(Expr::column("character").eq("A"))
-            .to_sql(),
+            .to_sql()
+            .validate(),
         @r#"SELECT "character" FROM "character" WHERE "character" = 'A'"#
     );
 }
@@ -301,7 +325,8 @@ fn select_20() {
             .column("character")
             .from("character")
             .and_where(Expr::column("character").like("A"))
-            .to_sql(),
+            .to_sql()
+            .validate(),
         @r#"SELECT "character" FROM "character" WHERE "character" LIKE 'A'"#
     );
 }
@@ -318,7 +343,8 @@ fn select_21() {
                     .or(Expr::column("character").like("%B"))
                     .or(Expr::column("character").like("%C%")),
             )
-            .to_sql(),
+            .to_sql()
+            .validate(),
         @r#"SELECT "character" FROM "character" WHERE "character" LIKE 'A%' OR "character" LIKE '%B' OR "character" LIKE '%C%'"#
     );
 }
@@ -339,7 +365,8 @@ fn select_22() {
                     .like("F")
                     .or(Expr::column("character").like("G")),
             )
-            .to_sql(),
+            .to_sql()
+            .validate(),
         @r#"SELECT "character" FROM "character" WHERE ("character" LIKE 'C' OR ("character" LIKE 'D' AND "character" LIKE 'E')) AND ("character" LIKE 'F' OR "character" LIKE 'G')"#
     );
 }
@@ -351,7 +378,8 @@ fn select_23() {
         Select::new()
             .column("character")
             .from("character")
-            .to_sql(),
+            .to_sql()
+            .validate(),
         @r#"SELECT "character" FROM "character""#
     );
 }
@@ -365,7 +393,8 @@ fn select_24() {
             .column("character")
             .from("character")
             .and_where(Expr::column("font_id").eq(5))
-            .to_sql(),
+            .to_sql()
+            .validate(),
         @r#"SELECT "character" FROM "character" WHERE "font_id" = 5"#
     );
 }
@@ -377,7 +406,8 @@ fn select_25() {
             .column("character")
             .from("character")
             .and_where(Expr::column("size_w").mul(2).eq(Expr::column("size_h").div(2)))
-            .to_sql(),
+            .to_sql()
+            .validate(),
         @r#"SELECT "character" FROM "character" WHERE "size_w" * 2 = "size_h" / 2"#
     );
 }
@@ -389,7 +419,8 @@ fn select_26() {
             .column("character")
             .from("character")
             .and_where(Expr::column("size_w").add(1).mul(2).eq(Expr::column("size_h").div(2).sub(1)))
-            .to_sql(),
+            .to_sql()
+            .validate(),
         @r#"SELECT "character" FROM "character" WHERE ("size_w" + 1) * 2 = ("size_h" / 2) - 1"#
     );
 }
@@ -403,7 +434,8 @@ fn select_27() {
             .and_where(Expr::column("size_w").eq(3))
             .and_where(Expr::column("size_h").eq(4))
             .and_where(Expr::column("size_h").eq(5))
-            .to_sql(),
+            .to_sql()
+            .validate(),
         @r#"SELECT "character", "size_w", "size_h" FROM "character" WHERE "size_w" = 3 AND "size_h" = 4 AND "size_h" = 5"#
     );
 }
@@ -421,7 +453,8 @@ fn select_28() {
                     .or(Expr::column("size_h").eq(4))
                     .or(Expr::column("size_h").eq(5)),
             )
-            .to_sql(),
+            .to_sql()
+            .validate(),
         @r#"SELECT "character", "size_w", "size_h" FROM "character" WHERE "size_w" = 3 OR "size_h" = 4 OR "size_h" = 5"#
     );
 }
@@ -435,7 +468,8 @@ fn select_30() {
             .and_where(
                 Expr::column("size_w").mul(2).add(Expr::column("size_h").div(3)).eq(4)
             )
-            .to_sql(),
+            .to_sql()
+            .validate(),
         @r#"SELECT "character", "size_w", "size_h" FROM "character" WHERE ("size_w" * 2) + ("size_h" / 3) = 4"#
     );
 }
@@ -445,7 +479,8 @@ fn select_31() {
     assert_snapshot!(
         Select::new()
             .expr((1..10_i32).fold(Expr::value(0), |expr, i| expr.add(i)))
-            .to_sql(),
+            .to_sql()
+            .validate(),
         @r#"SELECT 0 + 1 + 2 + 3 + 4 + 5 + 6 + 7 + 8 + 9"#
     );
 }
@@ -456,7 +491,8 @@ fn select_32() {
         Select::new()
             .expr_as(Expr::column("character"), "C")
             .from("character")
-            .to_sql(),
+            .to_sql()
+            .validate(),
         @r#"SELECT "character" AS "C" FROM "character""#
     );
 }
@@ -470,7 +506,8 @@ fn select_33a() {
             .and_where(Expr::column("aspect").in_subquery(
                 Select::new().expr(Expr::custom("3 + 2 * 2")),
             ))
-            .to_sql(),
+            .to_sql()
+            .validate(),
         @r#"SELECT "image" FROM "glyph" WHERE "aspect" IN (SELECT 3 + 2 * 2)"#
     );
 }
@@ -484,7 +521,8 @@ fn select_33b() {
             .and_where(Expr::column("aspect").in_subquery(
                 Select::new().expr(Expr::column("ignore")),
             ))
-            .to_sql(),
+            .to_sql()
+            .validate(),
         @r#"SELECT "image" FROM "glyph" WHERE "aspect" IN (SELECT "ignore")"#
     );
 }
@@ -504,7 +542,8 @@ fn select_34() {
                     .or(Expr::column("aspect").gt(12).and(Expr::column("aspect").lt(18)))
                     .or(Expr::column("aspect").gt(32)),
             )
-            .to_sql(),
+            .to_sql()
+            .validate(),
         @r#"SELECT "aspect", MAX("image") FROM "glyph" GROUP BY "aspect" HAVING "aspect" > 2 OR "aspect" < 8 OR ("aspect" > 12 AND "aspect" < 18) OR "aspect" > 32"#
     );
 }
@@ -516,7 +555,8 @@ fn select_35() {
             .column("id")
             .from("glyph")
             .and_where(Expr::column("aspect").is_null())
-            .to_sql(),
+            .to_sql()
+            .validate(),
         @r#"SELECT "id" FROM "glyph" WHERE "aspect" IS NULL"#
     );
 }
@@ -528,7 +568,8 @@ fn select_36() {
             .column("id")
             .from("glyph")
             .and_where(Expr::column("aspect").is_null())
-            .to_sql(),
+            .to_sql()
+            .validate(),
         @r#"SELECT "id" FROM "glyph" WHERE "aspect" IS NULL"#
     );
 }
@@ -576,7 +617,7 @@ fn select_38() {
         .to_values()
         .into_parts();
     assert_snapshot!(
-        statement,
+        statement.validate(),
         @r#"SELECT "id" FROM "glyph" WHERE "aspect" IS NULL OR "aspect" IS NOT NULL"#
     );
     assert!(values.is_empty());
@@ -595,7 +636,7 @@ fn select_39() {
         .to_values()
         .into_parts();
     assert_snapshot!(
-        statement,
+        statement.validate(),
         @r#"SELECT "id" FROM "glyph" WHERE "aspect" IS NULL AND "aspect" IS NOT NULL"#
     );
     assert!(values.is_empty());
@@ -612,7 +653,8 @@ fn select_40() {
                     .is_null()
                     .or(Expr::column("aspect").is_not_null().and(Expr::column("aspect").lt(8)))
             )
-            .to_sql(),
+            .to_sql()
+            .validate(),
         @r#"SELECT "id" FROM "glyph" WHERE "aspect" IS NULL OR ("aspect" IS NOT NULL AND "aspect" < 8)"#
     );
 }
@@ -626,7 +668,8 @@ fn select_41() {
             .from("glyph")
             .group_by_columns(["aspect"])
             .and_having(Expr::column("aspect").gt(2))
-            .to_sql(),
+            .to_sql()
+            .validate(),
         @r#"SELECT "aspect", MAX("image") FROM "glyph" GROUP BY "aspect" HAVING "aspect" > 2"#
     );
 }
@@ -639,7 +682,8 @@ fn select_42() {
             .from("glyph")
             .and_where(Expr::column("aspect").lt(8))
             .and_where(Expr::column("aspect").is_not_null())
-            .to_sql(),
+            .to_sql()
+            .validate(),
         @r#"SELECT "id" FROM "glyph" WHERE "aspect" < 8 AND "aspect" IS NOT NULL"#
     );
 }
@@ -651,7 +695,8 @@ fn select_43() {
             .column("id")
             .from("glyph")
             .and_where(Expr::custom("TRUE"))
-            .to_sql(),
+            .to_sql()
+            .validate(),
         @r#"SELECT "id" FROM "glyph" WHERE TRUE"#
     );
 }
@@ -663,7 +708,8 @@ fn select_44() {
             .column("id")
             .from("glyph")
             .and_where(Expr::column("aspect").lt(8).not())
-            .to_sql(),
+            .to_sql()
+            .validate(),
         @r#"SELECT "id" FROM "glyph" WHERE NOT "aspect" < 8"#
     );
 }
@@ -675,7 +721,8 @@ fn select_45() {
             .column("id")
             .from("glyph")
             .and_where(Expr::column("aspect").lt(8).or(Expr::column("aspect").is_not_null()).not())
-            .to_sql(),
+            .to_sql()
+            .validate(),
         @r#"SELECT "id" FROM "glyph" WHERE NOT ("aspect" < 8 OR "aspect" IS NOT NULL)"#
     );
 }
@@ -687,7 +734,8 @@ fn select_46() {
             .column("id")
             .from("glyph")
             .and_where(Expr::column("aspect").lt(8).not())
-            .to_sql(),
+            .to_sql()
+            .validate(),
         @r#"SELECT "id" FROM "glyph" WHERE NOT "aspect" < 8"#
     );
 }
@@ -699,7 +747,8 @@ fn select_47() {
             .column("id")
             .from("glyph")
             .and_where(Expr::column("aspect").lt(8).and(Expr::column("aspect").is_not_null()).not())
-            .to_sql(),
+            .to_sql()
+            .validate(),
         @r#"SELECT "id" FROM "glyph" WHERE NOT ("aspect" < 8 AND "aspect" IS NOT NULL)"#
     );
 }
@@ -711,7 +760,8 @@ fn select_48() {
             .column("id")
             .from("glyph")
             .and_where(Expr::tuple([Expr::column("aspect"), Expr::value(100)]).lt(Expr::tuple([Expr::value(8), Expr::value(100)])))
-            .to_sql(),
+            .to_sql()
+            .validate(),
         @r#"SELECT "id" FROM "glyph" WHERE ("aspect", 100) < (8, 100)"#
     );
 }
@@ -723,7 +773,8 @@ fn select_48a() {
             .column("id")
             .from("glyph")
             .and_where(Expr::tuple([Expr::column("aspect"), Expr::value("100")]).in_tuples([[Expr::value(8), Expr::value("100")]]))
-            .to_sql(),
+            .to_sql()
+            .validate(),
         @r#"SELECT "id" FROM "glyph" WHERE ("aspect", '100') IN ((8, '100'))"#
     );
 }
@@ -734,7 +785,8 @@ fn select_49() {
         Select::new()
             .expr(Expr::asterisk())
             .from("character")
-            .to_sql(),
+            .to_sql()
+            .validate(),
         @r#"SELECT * FROM "character""#
     );
 }
@@ -747,7 +799,8 @@ fn select_50() {
             .column(("font", "name"))
             .from("character")
             .inner_join("font", Expr::column(("character", "font_id")).eq(Expr::column(("font", "id"))))
-            .to_sql(),
+            .to_sql()
+            .validate(),
         @r#"SELECT "character".*, "font"."name" FROM "character" INNER JOIN "font" ON "character"."font_id" = "font"."id""#
     );
 }
@@ -763,7 +816,8 @@ fn select_51() {
                 Order::column("image").desc().nulls_first(),
                 Order::column(("glyph", "aspect")).asc().nulls_last()
             ])
-            .to_sql(),
+            .to_sql()
+            .validate(),
         @r#"SELECT "aspect" FROM "glyph" WHERE COALESCE("aspect", 0) > 2 ORDER BY "image" DESC NULLS FIRST, "glyph"."aspect" ASC NULLS LAST"#
     );
 }

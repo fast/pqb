@@ -12,9 +12,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+mod common;
+
 use insta::assert_snapshot;
 use pqb::expr::Expr;
 use pqb::index::CreateIndex;
+
+use crate::common::ValidateSQL;
 
 #[test]
 fn create_index_gist_with_options() {
@@ -25,7 +29,8 @@ fn create_index_gist_with_options() {
             .gist()
             .with_option("fillfactor", 80)
             .with_option("buffering", "auto")
-            .to_sql(),
+            .to_sql()
+            .validate(),
         @r#"CREATE INDEX ON "spatial" USING gist ("geom") WITH ("fillfactor" = 80, "buffering" = 'auto')"#
     );
 }
@@ -38,7 +43,8 @@ fn create_index_brin_with_options() {
             .column("created_at")
             .brin()
             .with_options([("pages_per_range", Expr::value(32)), ("autosummarize", Expr::value(true))])
-            .to_sql(),
+            .to_sql()
+            .validate(),
         @r#"CREATE INDEX ON "events" USING brin ("created_at") WITH ("pages_per_range" = 32, "autosummarize" = TRUE)"#
     );
 }
@@ -50,7 +56,8 @@ fn create_index_hash() {
             .table("tokens")
             .column("value")
             .hash()
-            .to_sql(),
+            .to_sql()
+            .validate(),
         @r#"CREATE INDEX ON "tokens" USING hash ("value")"#
     );
 }
@@ -62,7 +69,8 @@ fn create_index_named() {
             .name("idx_tokens_value")
             .table("tokens")
             .column("value")
-            .to_sql(),
+            .to_sql()
+            .validate(),
         @r#"CREATE INDEX "idx_tokens_value" ON "tokens" ("value")"#
     );
 }
@@ -76,7 +84,8 @@ fn create_index_if_not_exists_named() {
             .column("created_at")
             .brin()
             .if_not_exists()
-            .to_sql(),
+            .to_sql()
+            .validate(),
         @r#"CREATE INDEX IF NOT EXISTS "idx_events_created_at_brin" ON "events" USING brin ("created_at")"#
     );
 }
@@ -91,7 +100,8 @@ fn create_index_named_with_options() {
             .gist()
             .with_option("fillfactor", 90)
             .with_option("buffering", "auto")
-            .to_sql(),
+            .to_sql()
+            .validate(),
         @r#"CREATE INDEX "idx_spatial_geom_gist" ON "spatial" USING gist ("geom") WITH ("fillfactor" = 90, "buffering" = 'auto')"#
     );
 }
@@ -105,7 +115,8 @@ fn create_index_if_not_exists_custom_method() {
             .column("value")
             .if_not_exists()
             .using("hnsw")
-            .to_sql(),
+            .to_sql()
+            .validate(),
         @r#"CREATE INDEX IF NOT EXISTS "idx_tokens_value_hnsw" ON "tokens" USING hnsw ("value")"#
     );
 }
@@ -118,7 +129,8 @@ fn create_index_include_columns() {
             .table("orders")
             .column("customer_id")
             .include_columns(["id", "created_at"])
-            .to_sql(),
+            .to_sql()
+            .validate(),
         @r#"CREATE INDEX "idx_orders_customer" ON "orders" ("customer_id") INCLUDE ("id", "created_at")"#
     );
 }
@@ -131,7 +143,8 @@ fn create_index_partial() {
             .table("sessions")
             .column("user_id")
             .index_where(Expr::column("expires_at").gt(Expr::current_timestamp()))
-            .to_sql(),
+            .to_sql()
+            .validate(),
         @r#"CREATE INDEX "idx_sessions_active" ON "sessions" ("user_id") WHERE "expires_at" > CURRENT_TIMESTAMP"#
     );
 }
@@ -142,7 +155,8 @@ fn create_index_expression() {
         CreateIndex::new()
             .table("users")
             .expr(Expr::function("lower", [Expr::column("email")]))
-            .to_sql(),
+            .to_sql()
+            .validate(),
         @r#"CREATE INDEX ON "users" (lower("email"))"#
     );
 }
@@ -154,7 +168,8 @@ fn create_index_expression_with_column() {
             .table("metrics")
             .expr(Expr::column("value").add(Expr::value(1)))
             .column("created_at")
-            .to_sql(),
+            .to_sql()
+            .validate(),
         @r#"CREATE INDEX ON "metrics" (("value" + 1), "created_at")"#
     );
 }
@@ -168,7 +183,8 @@ fn create_index_concurrently() {
             .column("customer_id")
             .concurrently()
             .if_not_exists()
-            .to_sql(),
+            .to_sql()
+            .validate(),
         @r#"CREATE INDEX CONCURRENTLY IF NOT EXISTS "idx_orders_customer" ON "orders" ("customer_id")"#
     );
 }

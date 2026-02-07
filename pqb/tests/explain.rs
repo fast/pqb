@@ -12,9 +12,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+mod common;
+
 use insta::assert_snapshot;
 use pqb::query::Explain;
 use pqb::query::Select;
+
+use crate::common::ValidateSQL;
 
 #[test]
 fn explain_postgres_select_with_options() {
@@ -33,7 +37,8 @@ fn explain_postgres_select_with_options() {
             .memory(true)
             .format_json()
             .statement(Select::new().column("character").from("character"))
-            .to_sql(),
+            .to_sql()
+            .validate(),
         @r#"EXPLAIN (ANALYZE, VERBOSE 0, COSTS, SETTINGS 0, GENERIC_PLAN, BUFFERS, SERIALIZE TEXT, WAL, TIMING 0, SUMMARY, MEMORY, FORMAT JSON) SELECT "character" FROM "character""#
     );
 }
@@ -44,7 +49,8 @@ fn explain_postgres_serialize_text() {
         Explain::new()
             .serialize_text()
             .statement(Select::new().column("character").from("character"))
-            .to_sql(),
+            .to_sql()
+            .validate(),
         @r#"EXPLAIN (SERIALIZE TEXT) SELECT "character" FROM "character""#
     );
 }
@@ -55,7 +61,8 @@ fn explain_postgres_serialize_binary() {
         Explain::new()
             .serialize_binary()
             .statement(Select::new().column("character").from("character"))
-            .to_sql(),
+            .to_sql()
+            .validate(),
         @r#"EXPLAIN (SERIALIZE BINARY) SELECT "character" FROM "character""#
     );
 }
@@ -66,7 +73,8 @@ fn explain_postgres_serialize_none() {
         Explain::new()
             .serialize_none()
             .statement(Select::new().column("character").from("character"))
-            .to_sql(),
+            .to_sql()
+            .validate(),
         @r#"EXPLAIN (SERIALIZE NONE) SELECT "character" FROM "character""#
     );
 }

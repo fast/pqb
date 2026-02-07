@@ -12,24 +12,29 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+mod common;
+
 use insta::assert_snapshot;
 use pqb::expr::Expr;
 use pqb::func::FunctionCall;
 use pqb::query::Insert;
 use pqb::query::OnConflict;
 
+use crate::common::ValidateSQL;
+
 #[test]
 fn insert_on_conflict_1() {
-    let query = Insert::new()
-        .into_table("glyph")
-        .columns(["aspect", "image"])
-        .values([
-            "04108048005887010020060000204E0180400400".into(),
-            42.0321.into(),
-        ])
-        .on_conflict(OnConflict::column("id").update_column("aspect"));
     assert_snapshot!(
-        query.to_sql(),
+        Insert::new()
+            .into_table("glyph")
+            .columns(["aspect", "image"])
+            .values([
+                "04108048005887010020060000204E0180400400".into(),
+                42.0321.into(),
+            ])
+            .on_conflict(OnConflict::column("id").update_column("aspect"))
+            .to_sql()
+            .validate(),
         @r#"INSERT INTO "glyph" ("aspect", "image") VALUES ('04108048005887010020060000204E0180400400', 42.0321) ON CONFLICT ("id") DO UPDATE SET "aspect" = "excluded"."aspect""#
     );
 }
@@ -48,7 +53,8 @@ fn insert_on_conflict_2() {
                 OnConflict::columns(["id", "aspect"])
                     .update_columns(["aspect", "image"])
             )
-            .to_sql(),
+            .to_sql()
+            .validate(),
         @r#"INSERT INTO "glyph" ("aspect", "image") VALUES ('04108048005887010020060000204E0180400400', 42.0321) ON CONFLICT ("id", "aspect") DO UPDATE SET "aspect" = "excluded"."aspect", "image" = "excluded"."image""#
     );
 }
@@ -70,7 +76,8 @@ fn insert_on_conflict_3() {
                         ("image", 42.0321.into()),
                     ])
             )
-            .to_sql(),
+            .to_sql()
+            .validate(),
         @r#"INSERT INTO "glyph" ("aspect", "image") VALUES ('04108048005887010020060000204E0180400400', 42.0321) ON CONFLICT ("id", "aspect") DO UPDATE SET "aspect" = '04108048005887010020060000204E0180400400', "image" = 42.0321"#
     );
 }
@@ -88,7 +95,8 @@ fn insert_on_conflict_4() {
             .on_conflict(
                 OnConflict::columns(["id", "aspect"]).value("image", Expr::value(1).add(2))
             )
-            .to_sql(),
+            .to_sql()
+            .validate(),
         @r#"INSERT INTO "glyph" ("aspect", "image") VALUES ('04108048005887010020060000204E0180400400', 42.0321) ON CONFLICT ("id", "aspect") DO UPDATE SET "image" = 1 + 2"#
     );
 }
@@ -108,7 +116,8 @@ fn insert_on_conflict_5() {
                     .value("aspect", Expr::value("04108048005887010020060000204E0180400400"))
                     .update_column("image")
             )
-            .to_sql(),
+            .to_sql()
+            .validate(),
         @r#"INSERT INTO "glyph" ("aspect", "image") VALUES ('04108048005887010020060000204E0180400400', 42.0321) ON CONFLICT ("id", "aspect") DO UPDATE SET "aspect" = '04108048005887010020060000204E0180400400', "image" = "excluded"."image""#
     );
 }
@@ -128,7 +137,8 @@ fn insert_on_conflict_6() {
                     .update_column("aspect")
                     .value("image", Expr::value(1).add(2))
             )
-            .to_sql(),
+            .to_sql()
+            .validate(),
         @r#"INSERT INTO "glyph" ("aspect", "image") VALUES ('04108048005887010020060000204E0180400400', 42.0321) ON CONFLICT ("id", "aspect") DO UPDATE SET "aspect" = "excluded"."aspect", "image" = 1 + 2"#
     );
 }
@@ -144,7 +154,8 @@ fn insert_on_conflict_7() {
                 42.0321.into(),
             ])
             .on_conflict(OnConflict::expr(Expr::column("id")).update_column("aspect"))
-            .to_sql(),
+            .to_sql()
+            .validate(),
         @r#"INSERT INTO "glyph" ("aspect", "image") VALUES ('04108048005887010020060000204E0180400400', 42.0321) ON CONFLICT ("id") DO UPDATE SET "aspect" = "excluded"."aspect""#
     );
 }
@@ -163,7 +174,8 @@ fn insert_on_conflict_8() {
                 OnConflict::exprs([Expr::column("id"), Expr::column("aspect")])
                     .update_column("aspect")
             )
-            .to_sql(),
+            .to_sql()
+            .validate(),
         @r#"INSERT INTO "glyph" ("aspect", "image") VALUES ('04108048005887010020060000204E0180400400', 42.0321) ON CONFLICT ("id", "aspect") DO UPDATE SET "aspect" = "excluded"."aspect""#
     );
 }
@@ -185,7 +197,8 @@ fn insert_on_conflict_9() {
                 ])
                 .update_column("aspect")
             )
-            .to_sql(),
+            .to_sql()
+            .validate(),
         @r#"INSERT INTO "glyph" ("aspect", "image") VALUES ('04108048005887010020060000204E0180400400', 42.0321) ON CONFLICT ("id", LOWER("tokens")) DO UPDATE SET "aspect" = "excluded"."aspect""#
     );
 }
@@ -198,7 +211,8 @@ fn insert_on_conflict_10() {
             .columns(["id", "name"])
             .values([15.into(), "CyberFont Sans Serif".into()])
             .on_conflict(OnConflict::constraint("name_unique").do_nothing())
-            .to_sql(),
+            .to_sql()
+            .validate(),
         @r#"INSERT INTO "font" ("id", "name") VALUES (15, 'CyberFont Sans Serif') ON CONFLICT ON CONSTRAINT "name_unique" DO NOTHING"#
     );
 }
@@ -215,6 +229,7 @@ fn insert_on_conflict_11() {
                     .do_nothing()
             )
             .to_sql(),
+            // .validate(), // FIXME: "syntax error at or near \"IS\""
         @r#"INSERT INTO "font" ("id", "name") VALUES (20, 'Monospaced terminal') ON CONFLICT ("name", "variant" IS NULL) DO NOTHING"#
     );
 }
@@ -227,7 +242,8 @@ fn insert_on_conflict_do_nothing() {
             .columns(["aspect", "image"])
             .values(["abcd".into(), 42.0321.into()])
             .on_conflict(OnConflict::columns(["id", "aspect"]).do_nothing())
-            .to_sql(),
+            .to_sql()
+            .validate(),
         @r#"INSERT INTO "glyph" ("aspect", "image") VALUES ('abcd', 42.0321) ON CONFLICT ("id", "aspect") DO NOTHING"#
     );
 }

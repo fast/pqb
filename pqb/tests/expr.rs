@@ -12,9 +12,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+mod common;
+
 use insta::assert_snapshot;
 use pqb::expr::Expr;
 use pqb::query::Select;
+
+use crate::common::ValidateSQL;
 
 #[test]
 fn select_function() {
@@ -25,7 +29,8 @@ fn select_function() {
                 Expr::value(10),
                 Expr::value("[]"),
             ]))
-            .to_sql(),
+            .to_sql()
+            .validate(),
         @"SELECT int8range(1, 10, '[]')"
     );
 }
@@ -47,7 +52,8 @@ fn select_range_ops() {
             .and_where(left.clone().does_not_extend_right_of(right.clone()))
             .and_where(left.clone().does_not_extend_left_of(right.clone()))
             .and_where(left.adjacent_to(right))
-            .to_sql(),
+            .to_sql()
+            .validate(),
         @r#"SELECT * FROM "ranges" WHERE "r1" @> "r2" AND "r1" <@ "r2" AND "r1" && "r2" AND "r1" << "r2" AND "r1" >> "r2" AND "r1" &< "r2" AND "r1" &> "r2" AND "r1" -|- "r2""#
     );
 }

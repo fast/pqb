@@ -12,10 +12,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+mod common;
+
 use insta::assert_snapshot;
 use pqb::query::Select;
 use pqb::types::Asterisk;
 use pqb::types::Iden;
+
+use crate::common::ValidateSQL;
 
 #[test]
 fn iden_escape_detection() {
@@ -29,17 +33,18 @@ fn iden_escape_detection() {
 #[test]
 fn iden_rendering() {
     assert_snapshot!(
-        Select::new().column(Iden::new("simple")).to_sql(),
+        Select::new().column(Iden::new("simple")).to_sql().validate(),
         @r#"SELECT "simple""#
     );
     assert_snapshot!(
-        Select::new().column(Iden::new("has space")).to_sql(),
+        Select::new().column(Iden::new("has space")).to_sql().validate(),
         @r#"SELECT "has space""#
     );
     assert_snapshot!(
         Select::new()
             .column(Iden::new(r#"has"quote"#))
-            .to_sql(),
+            .to_sql()
+            .validate(),
         @r#"SELECT "has""quote""#
     );
 }
@@ -47,28 +52,31 @@ fn iden_rendering() {
 #[test]
 fn qualified_names_rendering() {
     assert_snapshot!(
-        Select::new().column("id").from(("audit", "events")).to_sql(),
+        Select::new().column("id").from(("audit", "events")).to_sql().validate(),
         @r#"SELECT "id" FROM "audit"."events""#
     );
     assert_snapshot!(
         Select::new()
             .column("id")
             .from(("analytics", "audit", "events"))
-            .to_sql(),
+            .to_sql()
+            .validate(),
         @r#"SELECT "id" FROM "analytics"."audit"."events""#
     );
     assert_snapshot!(
         Select::new()
             .column(("audit", "events", "id"))
             .from(("audit", "events"))
-            .to_sql(),
+            .to_sql()
+            .validate(),
         @r#"SELECT "audit"."events"."id" FROM "audit"."events""#
     );
     assert_snapshot!(
         Select::new()
             .column(("analytics", "audit", "events", Asterisk))
             .from(("analytics", "audit", "events"))
-            .to_sql(),
+            .to_sql()
+            .validate(),
         @r#"SELECT "analytics"."audit"."events".* FROM "analytics"."audit"."events""#
     );
 }
