@@ -18,7 +18,7 @@ use insta::assert_snapshot;
 use pqb::query::Explain;
 use pqb::query::Select;
 
-use crate::common::ValidateSQL;
+use crate::common::ValidateSql;
 
 #[test]
 fn explain_postgres_select_with_options() {

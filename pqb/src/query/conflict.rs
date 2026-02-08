@@ -216,7 +216,13 @@ pub(crate) fn write_on_conflict<W: SqlWriter>(w: &mut W, on_conflict: &OnConflic
                     if i > 0 {
                         w.push_str(", ");
                     }
-                    write_expr(w, expr);
+                    if matches!(expr, Expr::Column(_)) {
+                        write_expr(w, expr);
+                    } else {
+                        w.push_str("(");
+                        write_expr(w, expr);
+                        w.push_str(")");
+                    }
                 }
                 w.push_str(")");
             }

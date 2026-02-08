@@ -12,11 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-pub trait ValidateSQL {
+pub trait ValidateSql {
     fn validate(self) -> Self;
 }
 
-impl ValidateSQL for String {
+impl ValidateSql for String {
     #[track_caller]
     fn validate(self) -> Self {
         pg_query::parse(self.as_str()).unwrap();

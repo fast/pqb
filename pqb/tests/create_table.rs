@@ -21,7 +21,7 @@ use pqb::table::ColumnDef;
 use pqb::table::ColumnType;
 use pqb::table::CreateTable;
 
-use crate::common::ValidateSQL;
+use crate::common::ValidateSql;
 
 #[test]
 fn create_table_basic() {

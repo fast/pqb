@@ -20,7 +20,7 @@ use pqb::func::FunctionCall;
 use pqb::query::Insert;
 use pqb::query::OnConflict;
 
-use crate::common::ValidateSQL;
+use crate::common::ValidateSql;
 
 #[test]
 fn insert_on_conflict_1() {
@@ -199,7 +199,7 @@ fn insert_on_conflict_9() {
             )
             .to_sql()
             .validate(),
-        @r#"INSERT INTO "glyph" ("aspect", "image") VALUES ('04108048005887010020060000204E0180400400', 42.0321) ON CONFLICT ("id", LOWER("tokens")) DO UPDATE SET "aspect" = "excluded"."aspect""#
+        @r#"INSERT INTO "glyph" ("aspect", "image") VALUES ('04108048005887010020060000204E0180400400', 42.0321) ON CONFLICT ("id", (LOWER("tokens"))) DO UPDATE SET "aspect" = "excluded"."aspect""#
     );
 }
 
@@ -228,9 +228,9 @@ fn insert_on_conflict_11() {
                 OnConflict::exprs([Expr::column("name"), Expr::is_null(Expr::column("variant"))])
                     .do_nothing()
             )
-            .to_sql(),
-            // .validate(), // FIXME: "syntax error at or near \"IS\""
-        @r#"INSERT INTO "font" ("id", "name") VALUES (20, 'Monospaced terminal') ON CONFLICT ("name", "variant" IS NULL) DO NOTHING"#
+            .to_sql()
+            .validate(),
+        @r#"INSERT INTO "font" ("id", "name") VALUES (20, 'Monospaced terminal') ON CONFLICT ("name", ("variant" IS NULL)) DO NOTHING"#
     );
 }
 

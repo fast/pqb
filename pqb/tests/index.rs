@@ -18,7 +18,7 @@ use insta::assert_snapshot;
 use pqb::expr::Expr;
 use pqb::index::CreateIndex;
 
-use crate::common::ValidateSQL;
+use crate::common::ValidateSql;
 
 #[test]
 fn create_index_gist_with_options() {

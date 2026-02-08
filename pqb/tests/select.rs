@@ -21,7 +21,7 @@ use pqb::query::Order;
 use pqb::query::Select;
 use pqb::types::Asterisk;
 
-use crate::common::ValidateSQL;
+use crate::common::ValidateSql;
 
 #[test]
 fn select_0() {

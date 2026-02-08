@@ -19,7 +19,7 @@ use pqb::query::Select;
 use pqb::types::Asterisk;
 use pqb::types::Iden;
 
-use crate::common::ValidateSQL;
+use crate::common::ValidateSql;
 
 #[test]
 fn iden_escape_detection() {

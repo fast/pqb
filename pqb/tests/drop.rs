@@ -19,7 +19,7 @@ use pqb::index::DropIndex;
 use pqb::schema::DropSchema;
 use pqb::table::DropTable;
 
-use crate::common::ValidateSQL;
+use crate::common::ValidateSql;
 
 #[test]
 fn drop_index_sql() {
