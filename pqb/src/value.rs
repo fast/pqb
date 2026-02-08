@@ -23,7 +23,7 @@ use crate::writer::SqlWriter;
 
 /// SQL value variants.
 #[derive(Debug, Clone, PartialEq)]
-#[expect(missing_docs)]
+#[allow(missing_docs)]
 pub enum Value {
     Bool(Option<bool>),
     TinyInt(Option<i8>),
