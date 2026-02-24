@@ -83,14 +83,29 @@ fn select_is_distinct_from() {
             .validate(),
         @r#"SELECT * FROM "t" WHERE "c1" + 1 IS DISTINCT FROM "c2" + 2"#
     );
+}
+
+#[test]
+fn select_is_null() {
+    let c1 = Expr::column("c1");
 
     assert_snapshot!(
         Select::new()
             .expr(Expr::asterisk())
             .from("t")
-            .and_where(left.clone().add(Expr::value(1)).is_null())
+            .and_where(c1.clone().add(Expr::value(1)).is_null())
             .to_sql()
             .validate(),
         @r#"SELECT * FROM "t" WHERE "c1" + 1 IS NULL"#
+    );
+
+    assert_snapshot!(
+        Select::new()
+            .expr(Expr::asterisk())
+            .from("t")
+            .and_where(c1.clone().add(Expr::value(1)).is_not_null())
+            .to_sql()
+            .validate(),
+        @r#"SELECT * FROM "t" WHERE "c1" + 1 IS NOT NULL"#
     );
 }
