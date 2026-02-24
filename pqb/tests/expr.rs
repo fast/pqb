@@ -57,3 +57,55 @@ fn select_range_ops() {
         @r#"SELECT * FROM "ranges" WHERE "r1" @> "r2" AND "r1" <@ "r2" AND "r1" && "r2" AND "r1" << "r2" AND "r1" >> "r2" AND "r1" &< "r2" AND "r1" &> "r2" AND "r1" -|- "r2""#
     );
 }
+
+#[test]
+fn select_is_distinct_from() {
+    let left = Expr::column("c1");
+    let right = Expr::column("c2");
+
+    assert_snapshot!(
+        Select::new()
+            .expr(Expr::asterisk())
+            .from("t")
+            .and_where(left.clone().is_distinct_from(right.clone()))
+            .and_where(left.clone().is_not_distinct_from(right.clone()))
+            .to_sql()
+            .validate(),
+        @r#"SELECT * FROM "t" WHERE "c1" IS DISTINCT FROM "c2" AND "c1" IS NOT DISTINCT FROM "c2""#
+    );
+
+    assert_snapshot!(
+        Select::new()
+            .expr(Expr::asterisk())
+            .from("t")
+            .and_where(left.clone().add(Expr::value(1)).is_distinct_from(right.clone().add(Expr::value(2))))
+            .to_sql()
+            .validate(),
+        @r#"SELECT * FROM "t" WHERE "c1" + 1 IS DISTINCT FROM "c2" + 2"#
+    );
+}
+
+#[test]
+fn select_is_null() {
+    let c1 = Expr::column("c1");
+
+    assert_snapshot!(
+        Select::new()
+            .expr(Expr::asterisk())
+            .from("t")
+            .and_where(c1.clone().add(Expr::value(1)).is_null())
+            .to_sql()
+            .validate(),
+        @r#"SELECT * FROM "t" WHERE "c1" + 1 IS NULL"#
+    );
+
+    assert_snapshot!(
+        Select::new()
+            .expr(Expr::asterisk())
+            .from("t")
+            .and_where(c1.clone().add(Expr::value(1)).is_not_null())
+            .to_sql()
+            .validate(),
+        @r#"SELECT * FROM "t" WHERE "c1" + 1 IS NOT NULL"#
+    );
+}

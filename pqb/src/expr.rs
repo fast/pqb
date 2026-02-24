@@ -378,6 +378,22 @@ impl Expr {
         self.binary(BinaryOp::IsNot, right)
     }
 
+    /// Express a `IS DISTINCT FROM` expression.
+    pub fn is_distinct_from<R>(self, right: R) -> Expr
+    where
+        R: Into<Expr>,
+    {
+        self.binary(BinaryOp::IsDistinctFrom, right)
+    }
+
+    /// Express a `IS NOT DISTINCT FROM` expression.
+    pub fn is_not_distinct_from<R>(self, right: R) -> Expr
+    where
+        R: Into<Expr>,
+    {
+        self.binary(BinaryOp::IsNotDistinctFrom, right)
+    }
+
     /// Express a `IN` expression.
     pub fn is_in<V, I>(self, v: I) -> Expr
     where
@@ -479,6 +495,8 @@ pub enum BinaryOp {
     NotLike,
     Is,
     IsNot,
+    IsDistinctFrom,
+    IsNotDistinctFrom,
     In,
     NotIn,
     LShift,
@@ -645,6 +663,8 @@ fn write_binary_op<W: SqlWriter>(w: &mut W, op: &BinaryOp) {
         BinaryOp::NotLike => "NOT LIKE",
         BinaryOp::Is => "IS",
         BinaryOp::IsNot => "IS NOT",
+        BinaryOp::IsDistinctFrom => "IS DISTINCT FROM",
+        BinaryOp::IsNotDistinctFrom => "IS NOT DISTINCT FROM",
         BinaryOp::In => "IN",
         BinaryOp::NotIn => "NOT IN",
         BinaryOp::Between => "BETWEEN",
@@ -740,6 +760,7 @@ fn well_known_high_precedence(expr: &Expr, outer_op: &Operator) -> bool {
             || outer_op.is_between()
             || outer_op.is_in()
             || outer_op.is_like()
+            || outer_op.is_is()
             || outer_op.is_logical();
     }
 
@@ -789,7 +810,10 @@ impl Operator {
     fn is_is(&self) -> bool {
         matches!(
             self,
-            Operator::Binary(BinaryOp::Is) | Operator::Binary(BinaryOp::IsNot)
+            Operator::Binary(BinaryOp::Is)
+                | Operator::Binary(BinaryOp::IsNot)
+                | Operator::Binary(BinaryOp::IsDistinctFrom)
+                | Operator::Binary(BinaryOp::IsNotDistinctFrom)
         )
     }
 
