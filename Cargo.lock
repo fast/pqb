@@ -467,7 +467,7 @@ dependencies = [
 
 [[package]]
 name = "pqb"
-version = "0.1.3"
+version = "0.1.4"
 dependencies = [
  "insta",
  "pg_query",
