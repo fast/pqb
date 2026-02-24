@@ -38,7 +38,7 @@ serde_json = { version = "1", default-features = false, optional = true, feature
 uuid = { version = "1", default-features = false, optional = true }
 
 [dev-dependencies]
-insta = { version = "1.46.1" }
+insta = { version = "1.46.3" }
 pg_query = { version = "6.1.1" }
 
 [lints]
