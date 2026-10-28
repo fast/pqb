@@ -13,7 +13,7 @@
 # limitations under the License.
 
 [workspace]
-members = ["pqb", "tests-integration", "xtask"]
+members = ["examples", "pqb", "tests-integration", "xtask"]
 resolver = "3"
 
 [workspace.package]

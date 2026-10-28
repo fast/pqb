@@ -48,6 +48,7 @@ jobs:
           tool: typos-cli,taplo-cli,hawkeye
       - run: cargo x lint
       - run: cargo x check
+      - run: cargo run --locked -p examples --example dynamic_query
 
   test:
     name: Run tests
@@ -95,6 +96,12 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - name: Execute generated queries with both drivers
         run: cargo x test --postgres
+      - name: Run driver examples
+        env:
+          DATABASE_URL: ${{ env.PQB_TEST_DATABASE_URL }}
+        run: |
+          cargo run --locked -p examples --example postgres_upsert --features postgres
+          cargo run --locked -p examples --example sqlx_bulk_insert --features sqlx
 
   required:
     name: Required

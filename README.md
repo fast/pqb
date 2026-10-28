@@ -352,9 +352,26 @@ This development version raises the minimum Rust version to 1.94.0 to support SQ
 
 The minimum Rust version may increase in minor releases; patch releases retain their minor release's requirement.
 
+## Examples
+
+| Example | Scenario |
+| --- | --- |
+| [dynamic_query](examples/src/dynamic_query.rs) | Optional search filters, keyset pagination, and ordered bind parameters; no database required. |
+| [postgres_upsert](examples/src/postgres_upsert.rs) | Native-driver typed parameters, ON CONFLICT, and RETURNING. |
+| [sqlx_bulk_insert](examples/src/sqlx_bulk_insert.rs) | Iterator-based bulk insert and SQLx row decoding. |
+
+```shell
+cargo run -p examples --example dynamic_query -- "release notes"
+# Both driver examples use temporary tables in the database supplied by DATABASE_URL.
+DATABASE_URL=postgresql://postgres:postgres@localhost/postgres \
+  cargo run -p examples --example postgres_upsert --features postgres
+DATABASE_URL=postgresql://postgres:postgres@localhost/postgres \
+  cargo run -p examples --example sqlx_bulk_insert --features sqlx
+```
+
 ## Development
 
-`pqb/` contains the published library and offline SQL tests. `tests-integration/` contains real PostgreSQL workflows, grouped by queries, values, MERGE, COPY, and partitions. Database drivers and their runtimes are development dependencies of that separate package.
+`pqb/` contains the published library and offline SQL tests. `tests-integration/` contains real PostgreSQL workflows, grouped by queries, values, MERGE, COPY, and partitions. Database drivers and their runtimes are development dependencies of that separate package. Runnable applications live in the unpublished `examples/` package.
 
 ```shell
 cargo x check
