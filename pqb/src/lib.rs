@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//! A PostgreSQL query builder with optional driver integration.
+//! A PostgreSQL query builder with ordered parameters.
 //!
 //! PQB constructs SQL and ordered parameters. Expressions are dynamically typed; PostgreSQL checks
 //! schema names and SQL types. The default build has no dependencies. Connections, transactions and
@@ -41,37 +41,11 @@
 //! aggregate modifiers. [`table`] includes partition management. DDL and COPY use inline literals
 //! because PostgreSQL utility statements do not accept query parameters.
 //!
-//! # Driver features
+//! # Value features
 //!
-//! Enable `postgres` for `postgres-types` 0.2 binding (tokio-postgres 0.7 and postgres 0.19), or
-//! `sqlx` for SQLx 0.9. Choose runtime and TLS features in the application. Value features are
-//! `with-json`, `with-uuid`, `with-chrono` and `with-rust_decimal`.
-//!
-//! ```no_run
-//! # #[cfg(feature = "postgres")]
-//! # async fn example(client: &tokio_postgres::Client) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-//! use pqb::expr::Expr;
-//! use pqb::query::Select;
-//! let query = Select::new().column("name").from("users")
-//!     .and_where(Expr::column("id").eq(42_i64)).to_values();
-//! let rows = client.query_typed(query.sql(), &query.postgres_typed_params()?).await?;
-//! # let _ = rows;
-//! # Ok(())
-//! # }
-//! ```
-//!
-//! ```no_run
-//! # #[cfg(feature = "sqlx")]
-//! # async fn example(connection: &mut sqlx::PgConnection) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-//! use pqb::expr::Expr;
-//! use pqb::query::Select;
-//! let (sql, args) = Select::new().column("name").from("users")
-//!     .and_where(Expr::column("id").eq(42_i64)).to_values().into_sqlx()?;
-//! let rows = sqlx::query_with(sql, args).fetch_all(connection).await?;
-//! # let _ = rows;
-//! # Ok(())
-//! # }
-//! ```
+//! Enable `with-json`, `with-uuid`, `with-chrono` or `with-rust_decimal` for additional
+//! value types. [`SqlWriterValues::into_parts`] returns SQL and ordered values for
+//! application-owned parameter encoding and execution.
 //!
 //! # Contracts
 //!
@@ -85,9 +59,8 @@
 //!
 //! [`value::Value::typed_array`] and [`value::Value::null_array`] preserve the element type of
 //! empty and NULL arrays. [`value::ArrayValue`] adds validated multidimensional arrays and explicit
-//! lower bounds. Both drivers bind these arrays and reject integer overflow or incompatible element
-//! types. See the [README](https://github.com/fast/pqb#readme) for
-//! composition examples, SQL type mappings and compatibility notes.
+//! lower bounds. See the [README](https://github.com/fast/pqb#readme) for
+//! composition examples, value features and compatibility notes.
 #![cfg_attr(docsrs, feature(doc_cfg))]
 #![deny(missing_docs)]
 
@@ -100,9 +73,5 @@ pub mod table;
 pub mod types;
 pub mod value;
 
-#[cfg(feature = "postgres")]
-mod postgres;
-#[cfg(feature = "sqlx")]
-mod sqlx;
 mod writer;
 pub use self::writer::SqlWriterValues;

@@ -22,29 +22,12 @@ rust-version.workspace = true
 [package.metadata.release]
 release = false
 
-[features]
-postgres = ["pqb/postgres", "dep:tokio", "dep:tokio-postgres"]
-sqlx = ["pqb/sqlx", "dep:tokio", "dep:sqlx"]
-
 [dependencies]
 pqb.workspace = true
-sqlx = { workspace = true, features = ["runtime-tokio"], optional = true }
-tokio = { workspace = true, features = ["macros", "rt"], optional = true }
-tokio-postgres = { workspace = true, optional = true }
 
 [[example]]
 name = "dynamic_query"
 path = "src/dynamic_query.rs"
-
-[[example]]
-name = "postgres_upsert"
-path = "src/postgres_upsert.rs"
-required-features = ["postgres"]
-
-[[example]]
-name = "sqlx_bulk_insert"
-path = "src/sqlx_bulk_insert.rs"
-required-features = ["sqlx"]
 
 [lints]
 workspace = true

@@ -100,11 +100,9 @@ struct CommandCheck;
 impl CommandCheck {
     fn run(self) {
         // Keep this list in sync with pqb/Cargo.toml. Each invocation avoids workspace feature
-        // unification with the driver tests and example applications.
+        // unification with integration tests and example applications.
         for feature in [
             None,
-            Some("postgres"),
-            Some("sqlx"),
             Some("with-chrono"),
             Some("with-json"),
             Some("with-rust_decimal"),

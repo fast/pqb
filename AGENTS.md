@@ -14,7 +14,7 @@ Import symbols under their original names, starting intra-crate paths at `crate`
 
 Prefer direct code and a few coherent abstractions. Public API documentation should explain observable behavior, supported PostgreSQL versions, and meaningful error or panic conditions. Comments should explain invariants or PostgreSQL quirks rather than restating the code.
 
-## SQL and Driver Contracts
+## SQL Contracts
 
 PQB builds PostgreSQL SQL; it does not manage connections, transactions, migrations, or result decoding. Keep schema-dependent validation and expression type resolution in PostgreSQL rather than introducing a second SQL type system.
 
@@ -24,7 +24,7 @@ Validate structural errors consistently across builder entry points and against 
 
 ## Tests and Benchmarks
 
-Keep offline rendering and SQL-parser tests under `pqb/tests`. Real database workflows belong in `tests-integration`, use `PQB_TEST_DATABASE_URL`, and create temporary objects in a disposable database. Keep ordinary test runs independent of an external service; CI explicitly runs the database suite on PostgreSQL 14, 15, and 18, with version-specific cases gated by server capabilities.
+Keep offline rendering and SQL-parser tests under `pqb/tests`. Real SQL execution checks belong in `tests-integration`, invoke `psql` with `PQB_TEST_DATABASE_URL`, and create temporary objects in a disposable database. Keep these tests independent of Rust database drivers. Keep ordinary test runs independent of an external service; CI explicitly runs the database suite on PostgreSQL 14, 15, and 18, with version-specific cases gated by server capabilities.
 
 Add coverage for observable regressions and non-trivial boundaries. Prefer extending an existing workflow to duplicating it. For changes to SQL rendering or binding, execute representative generated SQL against PostgreSQL; parser acceptance alone does not establish valid execution or correct results.
 
@@ -34,7 +34,7 @@ Benchmarks belong in `benchmarks` and measure builder construction, rendering, o
 
 Keep Markdown paragraphs and list items on one source line. Follow the existing table formatting.
 
-Examples should demonstrate a small application scenario with concise module documentation. Put semantic explanations beside the code, and keep the README to an index and runnable commands. Driver examples should use temporary tables and obtain the connection string from the environment. Register examples explicitly, including any required Cargo features, and keep them compiling in CI.
+Examples should demonstrate a small application scenario with concise module documentation. Put semantic explanations beside the code, and keep the README to an index and runnable commands. Register examples explicitly, including any required Cargo features, and keep them compiling in CI.
 
 ## Changelog
 

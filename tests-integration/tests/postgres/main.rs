@@ -12,15 +12,41 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-mod copy;
-mod merge;
-mod partitions;
-mod queries;
+use std::io::Write;
+use std::process::Command;
+use std::process::Stdio;
+
+mod statements;
 mod values;
 
-type Error = Box<dyn std::error::Error + Send + Sync>;
-
-fn database_url() -> String {
-    std::env::var("PQB_TEST_DATABASE_URL")
-        .expect("set PQB_TEST_DATABASE_URL to a disposable PostgreSQL database")
+fn psql(script: &str) -> String {
+    let url = std::env::var("PQB_TEST_DATABASE_URL")
+        .expect("set PQB_TEST_DATABASE_URL to a disposable PostgreSQL database");
+    let mut child = Command::new("psql")
+        .args([
+            "--no-psqlrc",
+            "--no-password",
+            "--quiet",
+            "--tuples-only",
+            "--no-align",
+        ])
+        .args(["--set=ON_ERROR_STOP=1", "--file=-", "--dbname", &url])
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .expect("install psql and make it available on PATH");
+    child
+        .stdin
+        .take()
+        .unwrap()
+        .write_all(script.as_bytes())
+        .unwrap();
+    let output = child.wait_with_output().unwrap();
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    String::from_utf8(output.stdout).unwrap().trim().to_owned()
 }

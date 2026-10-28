@@ -9,7 +9,7 @@
 
 [![Crates.io][crates-badge]][crates-url]
 [![Documentation][docs-badge]][docs-url]
-[![MSRV 1.94.0][msrv-badge]](https://www.whatrustisit.com)
+[![MSRV 1.93.0][msrv-badge]](https://www.whatrustisit.com)
 [![Apache 2.0 licensed][license-badge]][license-url]
 [![Build Status][actions-badge]][actions-url]
 
@@ -17,13 +17,13 @@
 [crates-url]: https://crates.io/crates/pqb
 [docs-badge]: https://img.shields.io/docsrs/pqb
 [docs-url]: https://docs.rs/pqb
-[msrv-badge]: https://img.shields.io/badge/MSRV-1.94.0-green?logo=rust
+[msrv-badge]: https://img.shields.io/badge/MSRV-1.93.0-green?logo=rust
 [license-badge]: https://img.shields.io/crates/l/pqb
 [license-url]: https://github.com/fast/pqb/blob/main/LICENSE
 [actions-badge]: https://github.com/fast/pqb/actions/workflows/ci.yml/badge.svg
 [actions-url]: https://github.com/fast/pqb/actions/workflows/ci.yml
 
-**PQB builds PostgreSQL queries in Rust.** Compose dynamic queries, bind values, and execute them through SQLx, tokio-postgres, or postgres. The core has no dependencies, and database adapters and additional value types are optional.
+**PQB builds PostgreSQL queries in Rust.** Compose dynamic queries and collect ordered parameter values. The core has no dependencies; additional value types are optional.
 
 PQB focuses on PostgreSQL syntax with owned, composable builders. It does not inspect your schema or infer SQL expression types; PostgreSQL validates those when the statement is prepared or executed. Connections, transactions, pooling, and result decoding belong to your driver.
 
@@ -52,80 +52,20 @@ assert_eq!(bound.values(), &[true.into(), "alice%".into()]);
 
 Use `Expr::column("name")` for a column and `Expr::value("Alice")` (or `"Alice".into()`) for data. Identifiers are quoted; tuples such as `("public", "users")` express qualification. A string containing a dot is one identifier, not a qualified name. Runtime `&str` names are supported, and `Iden::new_static` avoids allocating fixed identifiers.
 
-## Execute with your driver
+## Values and parameters
 
-| Feature | Integration |
+`to_values()` returns SQL with numbered placeholders and a `Vec<Value>` in placeholder order. Use `sql()` and `values()` to borrow them, or `into_parts()` to take ownership. The application is responsible for encoding these values and executing the SQL.
+
+| Feature | Value types |
 | --- | --- |
-| `postgres` | `postgres-types` 0.2 binding for tokio-postgres 0.7 and postgres 0.19 |
-| `sqlx` | SQLx 0.9 PostgreSQL arguments and SQL text |
 | `with-json` | `serde_json::Value` |
 | `with-uuid` | `uuid::Uuid` |
 | `with-chrono` | Dates, times, naive timestamps, UTC and fixed-offset timestamps |
 | `with-rust_decimal` | `rust_decimal::Decimal` |
 
-Features compose: for example, `cargo add pqb --features postgres,with-json,with-chrono`. Choose a runtime and TLS configuration in your driver dependency; PQB does not select them for applications.
+Features compose: for example, `cargo add pqb --features with-json,with-chrono`. Binary values (`Vec<u8>` and `&[u8]`), scalar values and arrays are available without features. `Option<T>::None` represents NULL, and fixed-offset timestamps are normalized to UTC while preserving the instant.
 
-### tokio-postgres and postgres
-
-With the `postgres` feature, `Value` implements `postgres_types::ToSql`. `postgres_typed_params()` borrows the ordered parameters with their PostgreSQL types for either driver's `query_typed` method. Types come from the Rust values, so even `SELECT $1` works without a SQL cast.
-
-```rust,no_run
-# #[cfg(feature = "postgres")]
-# async fn example(client: &tokio_postgres::Client) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-use pqb::expr::Expr;
-use pqb::query::Select;
-
-let bound = Select::new()
-    .columns(["id", "name"])
-    .from("users")
-    .and_where(Expr::column("id").eq(42_i64))
-    .to_values();
-let rows = client.query_typed(bound.sql(), &bound.postgres_typed_params()?).await?;
-# let _ = rows;
-# Ok(())
-# }
-```
-
-For synchronous `postgres::Client`, use the same arguments without `.await`. Use `postgres_params()` with `query` or `execute` when a prepared statement or the SQL context already determines the parameter types. An untyped empty or NULL array needs that context; prefer `Value::typed_array` or `Value::null_array` with `query_typed`.
-
-### SQLx
-
-`into_sqlx()` returns owned `SqlStr` and `PgArguments`, ready for `query_with` or `query_as_with`. The adapter handles SQLx 0.9's SQL-string marker; custom SQL still has to satisfy the trust rules below.
-
-```rust,no_run
-# #[cfg(feature = "sqlx")]
-# async fn example(connection: &mut sqlx::PgConnection) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-use pqb::query::{Insert, OnConflict, Returning};
-
-let (sql, args) = Insert::new()
-    .into_table("users")
-    .columns(["id", "name"])
-    .values([42_i64.into(), "Alice".into()])
-    .on_conflict(OnConflict::column("id").update_column("name"))
-    .returning(Returning::all())
-    .to_values()
-    .into_sqlx()?;
-let rows = sqlx::query_with(sql, args).fetch_all(connection).await?;
-# let _ = rows;
-# Ok(())
-# }
-```
-
-### Values and SQL types
-
-| Rust value | PostgreSQL binding |
-| --- | --- |
-| `bool` | `boolean` |
-| `i8`, `u8`, `i16` | `smallint` |
-| `u16`, `i32` | `integer` |
-| `u32`, `u64`, `i64` | `bigint`; `u64 > i64::MAX` returns an encoding error |
-| `f32`, `f64` | `real`, `double precision`, including NaN and infinities |
-| `String`, `&str` | `text` and driver-supported string types |
-| `Vec<u8>`, `&[u8]` | `bytea` |
-| `Option<T>` | The same SQL type, with `None` representing NULL |
-| Enabled JSON, UUID, Chrono, Decimal types | Corresponding PostgreSQL types |
-
-Choose the Rust width that matches the SQL column, particularly with postgres's checked binary encoder. PostgreSQL has no unsigned integer types. Both adapters check conversions instead of truncating. Fixed-offset timestamps are normalized to UTC, preserving the instant. `postgres_typed_params()` and `into_sqlx()` supply parameter types from Rust values; use `Expr::value(value).cast_as("bigint")` when an SQL conversion is intended.
+Collected parameters retain their Rust value variants. Inline SQL uses PostgreSQL's literal type inference; use `Expr::value(value).cast_as("bigint")` when an explicit SQL type is needed. PostgreSQL has no unsigned integer types, so applications must choose a suitable SQL representation and check ranges when encoding unsigned values.
 
 Use typed arrays when empty or NULL arrays are possible:
 
@@ -137,7 +77,7 @@ let empty = Value::typed_array(ArrayType::Int, Vec::<i32>::new());
 let absent = Value::null_array(ArrayType::Int);
 ```
 
-Adapters support homogeneous arrays with nullable elements, including multiple dimensions and nondefault lower bounds through `ArrayValue`. `Value::array` remains available: postgres infers its type from the prepared statement; SQLx infers it from the first element and rejects untyped empty or NULL arrays. Mismatched element types return an encoding error.
+`Value::typed_array` and `Value::null_array` preserve an explicit element type. `Value::array` stores elements without a declared type, so empty or NULL arrays need a SQL type context when rendered inline.
 
 For multiple dimensions, provide lengths and flat elements in row-major order (the last subscript varies fastest). Use `(length, lower_bound)` pairs when subscripts should start somewhere other than 1:
 
@@ -148,10 +88,10 @@ use pqb::value::{ArrayType, ArrayValue};
 let matrix = ArrayValue::new(ArrayType::Int, [2, 2], [Some(1), None, Some(3), Some(4)])?;
 let shifted = ArrayValue::new(ArrayType::Int, [(2, 0), (2, -1)], [1, 2, 3, 4])?;
 let query = Select::new().expr(matrix).expr(shifted).to_values();
-// Each array is one parameter, usable with postgres_params() or into_sqlx().
+// Each array occupies one parameter and retains its shape and lower bounds.
 ```
 
-`ArrayValue::new` returns `ArrayError` for mismatched shape, incompatible elements, overflowing bounds or more than six dimensions. Zero-length axes become PostgreSQL's canonical empty array; use `Value::null_array` for a NULL array. Inline SQL preserves dimensions and lower bounds too. Result decoding remains the driver's responsibility: its default `Vec<T>` decoder does not handle multidimensional arrays; select individual elements, `unnest` the array or provide a custom decoder.
+`ArrayValue::new` returns `ArrayError` for mismatched shape, incompatible elements, overflowing bounds or more than six dimensions. Zero-length axes become PostgreSQL's canonical empty array; use `Value::null_array` for a NULL array. Inline SQL preserves dimensions and lower bounds too.
 
 ## Compose queries
 
@@ -209,11 +149,9 @@ let command = Copy::from_table("events")
     .format(CopyFormat::Csv)
     .header(true)
     .to_sql();
-// tokio-postgres: client.copy_in(&command).await?; then send bytes and finish the sink.
-// SQLx: connection.copy_in_raw(&command).await?; then send bytes and finish the import.
 ```
 
-COPY commands inline escaped literals; `to_values()` returns no parameters. Transfer rows using the driver's COPY API, not its ordinary query method. PQB does not serialize CSV or binary COPY records. CSV headers work on PostgreSQL 14; text headers require 15+. To export a partitioned table's rows, use a SELECT through `from_query`.
+COPY commands inline escaped literals; `to_values()` returns no parameters. The application must handle the PostgreSQL COPY protocol to transfer rows. PQB does not serialize CSV or binary COPY records. CSV headers work on PostgreSQL 14; text headers require 15+. To export a partitioned table's rows, use a SELECT through `from_query`.
 
 ### Partition management
 
@@ -278,7 +216,7 @@ let query = Select::new()
     ));
 ```
 
-`CommonTableExpression::expr_values` accepts expression rows, including casts for SQL type coercion. With the native driver, `postgres_typed_params()` supplies parameter types without needing casts. Set operations combine complete operands, including their own limits and ordering. Calling `order_by`, `limit`, or `offset` afterwards applies to the combined result. To filter or project that result, use `Select::new().from_subquery(combined, "result")`. `combine(SetOperator::IntersectAll, other)` and `combine(SetOperator::ExceptAll, other)` expose the remaining forms.
+`CommonTableExpression::expr_values` accepts expression rows, including casts for SQL type coercion. Set operations combine complete operands, including their own limits and ordering. Calling `order_by`, `limit`, or `offset` afterwards applies to the combined result. To filter or project that result, use `Select::new().from_subquery(combined, "result")`. `combine(SetOperator::IntersectAll, other)` and `combine(SetOperator::ExceptAll, other)` expose the remaining forms.
 
 ### Windowed aggregates
 
@@ -337,13 +275,13 @@ assert_eq!(Select::new().expr(expr).to_values().sql(), "SELECT COALESCE(\"name\"
 
 Builders reject structural mistakes such as missing targets, incompatible projection widths, unsupported built-in function modifiers and conflicting statement options. Checks at rendering use the final builder state, so changing setter order cannot bypass them. `Insert::try_values` returns an error for dynamic row input; convenience setters and rendering may panic on programmer errors. PostgreSQL still checks schema-dependent names, expression types, grouping rules, custom functions and version-specific syntax. Expressions are dynamically typed, not a compile-time schema DSL.
 
-The test suite parses generated SQL with PostgreSQL's parser. CI also executes representative relational workflows and parameter roundtrips through both drivers on PostgreSQL 14, 15 and 18. MERGE is exercised on 15 and 18, with RETURNING and BY SOURCE on 18. Version-specific features require their corresponding server: negative numeric scales and scales exceeding precision require PostgreSQL 15+, and virtual generated columns require PostgreSQL 18+.
+The test suite parses generated SQL with PostgreSQL's parser. CI also uses `psql` to execute generated SQL on PostgreSQL 14, 15 and 18, including prepared queries, COPY, partition operations and MERGE where supported. Version-specific features require their corresponding server: negative numeric scales and scales exceeding precision require PostgreSQL 15+, and virtual generated columns require PostgreSQL 18+.
 
 PQB does not model every extension-specific SQL construct. Use explicit trusted SQL where the structured API does not cover a statement. PQB does not implement an ORM, migration runner, or connection management.
 
 ## Compatibility notes
 
-This development version raises the minimum Rust version to 1.94.0 to support SQLx 0.9. It also corrects behavior from 0.1.4:
+This development version corrects behavior from 0.1.4:
 
 - DDL `to_values()` embeds literals instead of producing unusable bind parameters.
 - `default_values()` inserts one default row and preserves ON CONFLICT and RETURNING. `or_default_values(n)` accepts only zero or one; use explicit rows of `Expr::default_value()` for multiple default rows.
@@ -352,32 +290,23 @@ This development version raises the minimum Rust version to 1.94.0 to support SQ
 
 The minimum Rust version may increase in minor releases; patch releases retain their minor release's requirement.
 
-## Examples
+## Example
 
-| Example | Scenario |
-| --- | --- |
-| [dynamic_query](examples/src/dynamic_query.rs) | Optional search filters, keyset pagination, and ordered bind parameters; no database required. |
-| [postgres_upsert](examples/src/postgres_upsert.rs) | Native-driver typed parameters, ON CONFLICT, and RETURNING. |
-| [sqlx_bulk_insert](examples/src/sqlx_bulk_insert.rs) | Iterator-based bulk insert and SQLx row decoding. |
+[dynamic_query](examples/src/dynamic_query.rs) demonstrates optional search filters, keyset pagination and ordered bind parameters without a database:
 
 ```shell
 cargo run -p examples --example dynamic_query -- "release notes"
-# Both driver examples use temporary tables in the database supplied by DATABASE_URL.
-DATABASE_URL=postgresql://postgres:postgres@localhost/postgres \
-  cargo run -p examples --example postgres_upsert --features postgres
-DATABASE_URL=postgresql://postgres:postgres@localhost/postgres \
-  cargo run -p examples --example sqlx_bulk_insert --features sqlx
 ```
 
 ## Development
 
-`pqb/` contains the published library and offline SQL tests. `tests-integration/` contains real PostgreSQL workflows, grouped by queries, values, MERGE, COPY, and partitions. Runnable applications live in `examples/`, and performance workloads live in `benchmarks/`. These development packages are unpublished; their driver runtimes and benchmark dependencies do not become library dependencies.
+`pqb/` contains the published library and offline SQL tests. `tests-integration/` validates generated SQL through the `psql` command-line client. Runnable examples live in `examples/`, and performance workloads live in `benchmarks/`. These development packages are unpublished.
 
 ```shell
 cargo x check
 cargo x test
 cargo x lint
-# Point this at a disposable PostgreSQL instance. Tests use temporary tables.
+# Requires psql on PATH and a disposable PostgreSQL database. Tests use temporary tables.
 PQB_TEST_DATABASE_URL=postgresql://postgres:postgres@localhost/postgres \
   cargo x test --postgres
 ```

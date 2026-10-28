@@ -13,7 +13,6 @@
 // limitations under the License.
 
 use pqb::expr::Expr;
-use pqb::func::FunctionCall;
 use pqb::query::Select;
 use pqb::value::ArrayType;
 use pqb::value::ArrayValue;
@@ -23,10 +22,7 @@ use pqb::value::NaiveDate;
 use pqb::value::Uuid;
 use pqb::value::Value;
 
-use crate::Error;
-use crate::database_url;
-
-pub fn value_checks() -> Select {
+fn value_checks() -> Select {
     let date = NaiveDate::from_ymd_opt(2026, 10, 28).unwrap();
     let timestamp = DateTime::parse_from_rfc3339("2026-10-28T12:34:56+08:00").unwrap();
     let bc = NaiveDate::from_ymd_opt(0, 1, 1).unwrap();
@@ -179,30 +175,10 @@ pub fn value_checks() -> Select {
         }))
 }
 
-#[tokio::test]
-#[ignore = "requires PQB_TEST_DATABASE_URL"]
-async fn postgres_binds_values_without_sql_type_context() -> Result<(), Error> {
-    let (client, connection) =
-        tokio_postgres::connect(&database_url(), tokio_postgres::NoTls).await?;
-    let connection = tokio::spawn(connection);
-    let matrix = ArrayValue::new(ArrayType::Int, [2, 2], [1, 2, 3, 4])?;
-    let bound = Select::new()
-        .expr(42)
-        .expr(Option::<i32>::None)
-        .expr(Value::typed_array(ArrayType::Int, Vec::<i32>::new()))
-        .expr(Value::array([1, 2]))
-        .expr(FunctionCall::custom("array_dims", [Value::from(matrix)]))
-        .to_values();
-    let rows = client
-        .query_typed(bound.sql(), &bound.postgres_typed_params()?)
-        .await?;
-    let row = &rows[0];
-    assert_eq!(row.get::<_, i32>(0), 42);
-    assert_eq!(row.get::<_, Option<i32>>(1), None);
-    assert!(row.get::<_, Vec<i32>>(2).is_empty());
-    assert_eq!(row.get::<_, Vec<i32>>(3), [1, 2]);
-    assert_eq!(row.get::<_, String>(4), "[1:2][1:2]");
-    drop(client);
-    connection.await??;
-    Ok(())
+#[test]
+#[ignore = "requires psql and PQB_TEST_DATABASE_URL"]
+fn inline_values_preserve_sql_semantics() {
+    let output = crate::psql(&format!("{};\n", value_checks().to_sql()));
+    assert!(!output.is_empty());
+    assert!(output.split('|').all(|value| value == "t"), "{output}");
 }

@@ -48,14 +48,14 @@ impl From<(usize, i32)> for ArrayDimension {
 
 /// A typed rectangular array with explicit dimensions and flat, row-major elements.
 ///
-/// The last subscript varies fastest. Convert to [`Value`] to bind through either driver.
-/// Any zero-length axis produces PostgreSQL's canonical empty array with no dimensions;
-/// use [`Value::null_array`] for a NULL array. Elements may be typed NULL values.
+/// The last subscript varies fastest. Convert to [`Value`] to collect it as one parameter or render
+/// an SQL array literal. Any zero-length axis produces PostgreSQL's canonical empty array with no
+/// dimensions; use [`Value::null_array`] for a NULL array. Elements may be typed NULL values.
 #[derive(Debug, Clone, PartialEq)]
 pub struct ArrayValue {
-    pub(crate) ty: ArrayType,
-    pub(crate) dimensions: Vec<ArrayDimension>,
-    pub(crate) values: Vec<Value>,
+    ty: ArrayType,
+    dimensions: Vec<ArrayDimension>,
+    values: Vec<Value>,
 }
 
 /// An array shape or element type that PostgreSQL cannot represent.
@@ -191,7 +191,7 @@ impl From<ArrayValue> for Value {
 }
 
 impl ArrayType {
-    pub(crate) fn of_value(value: &Value) -> Option<Self> {
+    fn of_value(value: &Value) -> Option<Self> {
         Some(match value {
             Value::TinyInt(_) | Value::TinyUnsigned(_) | Value::SmallInt(_) => Self::SmallInt,
             Value::SmallUnsigned(_) | Value::Int(_) => Self::Int,
@@ -226,7 +226,7 @@ pub(super) fn write_array<W: SqlWriter>(w: &mut W, array: &ArrayValue) {
     let shifted = array.dimensions.iter().any(|d| d.lower_bound != 1);
     if shifted {
         // Let PostgreSQL serialize element text (notably bytea/JSON and escaped strings) before
-        // adding explicit bounds. This keeps inline and binary parameter representations equal.
+        // adding explicit bounds, preserving quoting for every scalar type.
         w.push_str("('");
         for d in &array.dimensions {
             w.push_fmt(format_args!(

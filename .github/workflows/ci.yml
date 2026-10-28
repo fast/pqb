@@ -56,7 +56,7 @@ jobs:
     strategy:
       matrix:
         os: [ ubuntu-24.04, macos-14, windows-2022 ]
-        rust-version: [ "1.94.0", "stable" ]
+        rust-version: [ "1.93.0", "stable" ]
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v6
@@ -95,14 +95,10 @@ jobs:
       - uses: actions/checkout@v6
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
-      - name: Execute generated queries with both drivers
+      - name: Install PostgreSQL client
+        run: sudo apt-get update && sudo apt-get install --yes postgresql-client
+      - name: Execute generated SQL with psql
         run: cargo x test --postgres
-      - name: Run driver examples
-        env:
-          DATABASE_URL: ${{ env.PQB_TEST_DATABASE_URL }}
-        run: |
-          cargo run --locked -p examples --example postgres_upsert --features postgres
-          cargo run --locked -p examples --example sqlx_bulk_insert --features sqlx
 
   required:
     name: Required

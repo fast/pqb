@@ -22,14 +22,10 @@ homepage = "https://github.com/fast/pqb"
 license = "Apache-2.0"
 readme = "README.md"
 repository = "https://github.com/fast/pqb"
-rust-version = "1.94.0"
+rust-version = "1.93.0"
 
 [workspace.dependencies]
-bytes = "1"
 pqb = { path = "pqb" }
-sqlx = { version = "0.9", default-features = false, features = ["postgres"] }
-tokio = "1"
-tokio-postgres = "0.7"
 
 [workspace.lints.rust]
 unknown_lints = "deny"

@@ -4,7 +4,6 @@
 
 ### Breaking changes
 
-- Raise the minimum supported Rust version from 1.93.0 to 1.94.0 for SQLx 0.9 support.
 - Replace `ColumnSpec::default` and `ColumnSpec::generated` with `ColumnSpec::value`, using `ColumnValue::Default`, `Generated`, or `Identity`. Existing `ColumnDef` builder methods remain available.
 - Make DDL `to_values()` return inline SQL and an empty parameter list, matching PostgreSQL utility-statement requirements.
 - Restrict `Insert::or_default_values(n)` to zero or one row. Use `default_values()` for one default row, or explicit columns and rows containing `Expr::default_value()` for multiple rows.
@@ -18,7 +17,6 @@
 - Build MERGE with ordered conditional update, delete and insert actions on PostgreSQL 15+. RETURNING, use as a CTE, and NOT MATCHED BY SOURCE require PostgreSQL 17+.
 - Build COPY commands for text, CSV and binary streams, query exports and server files or programs. COPY transport and row encoding remain the driver's responsibility.
 - Create schemas, identity columns, named relational constraints, and RANGE, LIST and HASH partitions; attach, detach, and subpartition tables, including PostgreSQL 14+ concurrent detach.
-- Bind values through optional `postgres` and `sqlx` adapters. `postgres_typed_params()` supports native-driver queries without SQL parameter type context, and `into_sqlx()` prepares SQLx 0.9 arguments.
 - Add binary, date/time and decimal values, typed empty and NULL arrays, and validated multidimensional arrays with nullable elements and explicit lower bounds. Fixed-offset timestamps preserve their instant in UTC.
 - Accept runtime identifier strings and iterator-based CTE rows; expose a shared `Statement` for CTEs and EXPLAIN.
 
