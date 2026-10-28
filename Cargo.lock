@@ -1308,6 +1308,7 @@ version = "0.1.4"
 dependencies = [
  "bytes",
  "chrono",
+ "futures-util",
  "insta",
  "pg_query",
  "postgres-types",

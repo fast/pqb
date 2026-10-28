@@ -150,7 +150,7 @@ Adapters support homogeneous, one-dimensional arrays with nullable elements. `Va
 | Expressions | Arithmetic, comparisons, NULL tests, range/array containment, JSON access, LIKE/ILIKE, tuples, subqueries, `EXISTS`, `CASE` |
 | Aggregation | Aggregate `DISTINCT`, input ordering, `FILTER`, window partition/order/frame |
 | Writes | Multi-row insert, insert from select, default values, upsert, update from, delete using, MERGE, aliased returning |
-| PostgreSQL operations | Row locks, `NOWAIT`, `SKIP LOCKED`, table sampling, `EXPLAIN` options |
+| PostgreSQL operations | COPY text/CSV/binary, row locks, `NOWAIT`, `SKIP LOCKED`, table sampling, `EXPLAIN` options |
 | DDL | Create/alter/drop tables, identity/generated columns, relational constraints, create/drop indexes and schemas |
 
 ### MERGE
@@ -176,7 +176,26 @@ let query = Merge::new()
     .to_values();
 ```
 
+### COPY
+
+`Copy::from_table` imports from STDIN; `Copy::to_table` exports to STDOUT. `Copy::from_query` exports a query, including its WHERE and ordering. Set `CopyFormat::Csv` or `Binary` as needed. Common options include delimiter, NULL marker, header, quote/escape, encoding, FREEZE and CSV force-quoting/NULL handling. Files and server programs can be selected with `.file(...)` and `.program(...)`; program commands must be trusted shell syntax, and PostgreSQL enforces server-side privileges.
+
+```rust
+use pqb::query::{Copy, CopyFormat};
+
+let command = Copy::from_table("events")
+    .columns(["id", "payload"])
+    .format(CopyFormat::Csv)
+    .header(true)
+    .to_sql();
+// tokio-postgres: client.copy_in(&command).await?; then send bytes and finish the sink.
+// SQLx: connection.copy_in_raw(&command).await?; then send bytes and finish the import.
+```
+
+COPY commands inline escaped literals; `to_values()` returns no parameters. Transfer rows using the driver's COPY API, not its ordinary query method. PQB does not serialize CSV or binary COPY records. CSV headers work on PostgreSQL 14; text headers require 15+. To export a partitioned table's rows, use a SELECT through `from_query`.
+
 ### Dynamic predicates
+
 
 
 `Expr::all` combines conditions with AND; `Expr::any` uses OR. Empty collections yield TRUE and FALSE respectively. Empty `IN` and `NOT IN` lists also become boolean constants without allocating parameters. Conditional Rust code can build the list before passing it to PQB.
@@ -278,7 +297,7 @@ Builders reject basic structural mistakes such as missing mutation targets or in
 
 The test suite parses generated SQL with PostgreSQL's parser. CI also executes representative relational workflows and parameter roundtrips through both drivers on PostgreSQL 14 and 18. Version-specific features require their corresponding server: negative numeric scales and scales exceeding precision require PostgreSQL 15+, and virtual generated columns require PostgreSQL 18+.
 
-PQB does not yet have dedicated builders for COPY, partition management, or every extension-specific SQL construct. Use explicit trusted SQL where the structured API does not cover a statement. PQB does not implement an ORM, migration runner, or connection management.
+PQB does not yet have dedicated builders for partition management, or every extension-specific SQL construct. Use explicit trusted SQL where the structured API does not cover a statement. PQB does not implement an ORM, migration runner, or connection management.
 
 ## Compatibility notes
 
