@@ -21,6 +21,7 @@ mod insert;
 mod order;
 mod returning;
 mod select;
+mod statement;
 mod update;
 mod with;
 
@@ -31,5 +32,6 @@ pub use self::insert::*;
 pub use self::order::*;
 pub use self::returning::*;
 pub use self::select::*;
+pub use self::statement::*;
 pub use self::update::*;
 pub use self::with::*;

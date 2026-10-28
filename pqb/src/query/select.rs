@@ -32,6 +32,8 @@ use crate::writer::SqlWriterValues;
 /// Select rows from an existing table.
 #[derive(Default, Debug, Clone, PartialEq)]
 pub struct Select {
+    distinct: Option<Vec<Expr>>,
+    set: Option<Box<SetOperation>>,
     selects: Vec<SelectExpr>,
     from: Vec<TableRef>,
     joins: Vec<JoinExpr>,
@@ -51,13 +53,91 @@ pub struct Select {
 pub struct JoinExpr {
     join_type: JoinType,
     table: TableRef,
-    on: Option<Expr>,
+    on: Option<JoinCondition>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+enum JoinCondition {
+    On(Expr),
+    Using(Vec<Iden>),
+}
+
+#[derive(Debug, Clone, PartialEq)]
+struct SetOperation {
+    left: Select,
+    op: SetOperator,
+    right: Select,
+}
+
+/// Set operations combining two SELECT results.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[expect(missing_docs)]
+pub enum SetOperator {
+    Union,
+    UnionAll,
+    Intersect,
+    IntersectAll,
+    Except,
+    ExceptAll,
 }
 
 impl Select {
     /// Create a new select statement.
     pub fn new() -> Self {
         Self::default()
+    }
+
+    /// Eliminate duplicate output rows.
+    pub fn distinct(mut self) -> Self {
+        self.distinct = Some(vec![]);
+        self
+    }
+
+    /// Keep the first row of each group of expressions (DISTINCT ON).
+    ///
+    /// Start ORDER BY with these expressions to choose which row is kept.
+    pub fn distinct_on<I, E>(mut self, expressions: I) -> Self
+    where
+        I: IntoIterator<Item = E>,
+        E: Into<Expr>,
+    {
+        self.distinct = Some(expressions.into_iter().map(Into::into).collect());
+        self
+    }
+
+    /// Combine complete queries, preserving each operand's ordering and pagination.
+    ///
+    /// ORDER BY, LIMIT, OFFSET and WITH added afterwards apply to the combined result.
+    /// To filter or project that result, wrap it with [`Self::from_subquery`].
+    pub fn combine(self, op: SetOperator, right: Select) -> Self {
+        Self {
+            set: Some(Box::new(SetOperation {
+                left: self,
+                op,
+                right,
+            })),
+            ..Self::new()
+        }
+    }
+
+    /// Combine rows, eliminating duplicates.
+    pub fn union(self, right: Select) -> Self {
+        self.combine(SetOperator::Union, right)
+    }
+
+    /// Combine rows, retaining duplicates.
+    pub fn union_all(self, right: Select) -> Self {
+        self.combine(SetOperator::UnionAll, right)
+    }
+
+    /// Keep rows present in both queries, eliminating duplicates.
+    pub fn intersect(self, right: Select) -> Self {
+        self.combine(SetOperator::Intersect, right)
+    }
+
+    /// Remove rows present in the right query, eliminating duplicates.
+    pub fn except(self, right: Select) -> Self {
+        self.combine(SetOperator::Except, right)
     }
 
     /// Build the SQL string with placeholders and return collected values.
@@ -184,7 +264,7 @@ impl Select {
         self.joins.push(JoinExpr {
             join_type: JoinType::LeftJoin,
             table: table.into(),
-            on: Some(on.into()),
+            on: Some(JoinCondition::On(on.into())),
         });
         self
     }
@@ -198,7 +278,72 @@ impl Select {
         self.joins.push(JoinExpr {
             join_type: JoinType::InnerJoin,
             table: table.into(),
-            on: Some(on.into()),
+            on: Some(JoinCondition::On(on.into())),
+        });
+        self
+    }
+
+    /// Join a table or subquery with an ON condition.
+    ///
+    /// # Panics
+    /// Panics for CROSS JOIN; use [`Self::cross_join`] instead.
+    pub fn join<T, E>(mut self, join_type: JoinType, table: T, on: E) -> Self
+    where
+        T: IntoTableRef,
+        E: Into<Expr>,
+    {
+        assert!(
+            join_type != JoinType::CrossJoin,
+            "use cross_join without an ON condition"
+        );
+        self.joins.push(JoinExpr {
+            join_type,
+            table: table.into(),
+            on: Some(JoinCondition::On(on.into())),
+        });
+        self
+    }
+
+    /// Right outer join with an ON condition.
+    pub fn right_join<T: IntoTableRef, E: Into<Expr>>(self, table: T, on: E) -> Self {
+        self.join(JoinType::RightJoin, table, on)
+    }
+
+    /// Full outer join with an ON condition.
+    pub fn full_outer_join<T: IntoTableRef, E: Into<Expr>>(self, table: T, on: E) -> Self {
+        self.join(JoinType::FullOuterJoin, table, on)
+    }
+
+    /// Cartesian product with a table or subquery.
+    pub fn cross_join<T: IntoTableRef>(mut self, table: T) -> Self {
+        self.joins.push(JoinExpr {
+            join_type: JoinType::CrossJoin,
+            table: table.into(),
+            on: None,
+        });
+        self
+    }
+
+    /// Join on equally named columns, emitting each join column once in SELECT *.
+    ///
+    /// # Panics
+    /// Panics for an empty column list or a CROSS JOIN.
+    pub fn join_using<T, I, C>(mut self, join_type: JoinType, table: T, columns: I) -> Self
+    where
+        T: IntoTableRef,
+        I: IntoIterator<Item = C>,
+        C: IntoIden,
+    {
+        let columns: Vec<_> = columns.into_iter().map(IntoIden::into_iden).collect();
+        assert!(!columns.is_empty(), "USING requires at least one column");
+        assert!(
+            join_type != JoinType::CrossJoin,
+            "CROSS JOIN cannot have USING"
+        );
+        self.joins.push(JoinExpr {
+            join_type,
+            table: table.into(),
+            on: Some(JoinCondition::Using(columns)),
         });
         self
     }
@@ -279,8 +424,10 @@ impl Select {
 }
 
 impl Select {
-    pub(crate) const fn columns_len(&self) -> usize {
-        self.selects.len()
+    pub(crate) fn columns_len(&self) -> usize {
+        self.set
+            .as_ref()
+            .map_or(self.selects.len(), |set| set.left.columns_len())
     }
 }
 
@@ -442,7 +589,46 @@ pub(crate) fn write_select<W: SqlWriter>(w: &mut W, select: &Select) {
         w.push_char(' ');
     }
 
+    if let Some(set) = &select.set {
+        assert!(
+            select.selects.is_empty()
+                && select.from.is_empty()
+                && select.joins.is_empty()
+                && select.conditions.is_empty()
+                && select.groups.is_empty()
+                && select.having.is_empty()
+                && select.distinct.is_none()
+                && select.table_sample.is_none()
+                && select.lock.is_none(),
+            "wrap a set operation in from_subquery before projecting, filtering or locking it"
+        );
+        w.push_char('(');
+        write_select(w, &set.left);
+        w.push_str(") ");
+        w.push_str(match set.op {
+            SetOperator::Union => "UNION",
+            SetOperator::UnionAll => "UNION ALL",
+            SetOperator::Intersect => "INTERSECT",
+            SetOperator::IntersectAll => "INTERSECT ALL",
+            SetOperator::Except => "EXCEPT",
+            SetOperator::ExceptAll => "EXCEPT ALL",
+        });
+        w.push_str(" (");
+        write_select(w, &set.right);
+        w.push_char(')');
+        write_select_tail(w, select);
+        return;
+    }
+
     w.push_str("SELECT ");
+    if let Some(distinct) = &select.distinct {
+        w.push_str("DISTINCT ");
+        if !distinct.is_empty() {
+            w.push_str("ON ");
+            crate::expr::write_tuple(w, distinct);
+            w.push_char(' ');
+        }
+    }
 
     for (i, select_expr) in select.selects.iter().enumerate() {
         if i > 0 {
@@ -479,11 +665,28 @@ pub(crate) fn write_select<W: SqlWriter>(w: &mut W, select: &Select) {
         match join.join_type {
             JoinType::LeftJoin => w.push_str(" LEFT JOIN "),
             JoinType::InnerJoin => w.push_str(" INNER JOIN "),
+            JoinType::RightJoin => w.push_str(" RIGHT JOIN "),
+            JoinType::FullOuterJoin => w.push_str(" FULL OUTER JOIN "),
+            JoinType::CrossJoin => w.push_str(" CROSS JOIN "),
         }
         write_table_ref(w, &join.table);
         if let Some(on) = &join.on {
-            w.push_str(" ON ");
-            write_expr(w, on);
+            match on {
+                JoinCondition::On(expr) => {
+                    w.push_str(" ON ");
+                    write_expr(w, expr);
+                }
+                JoinCondition::Using(columns) => {
+                    w.push_str(" USING (");
+                    for (i, column) in columns.iter().enumerate() {
+                        if i > 0 {
+                            w.push_str(", ");
+                        }
+                        write_iden(w, column);
+                    }
+                    w.push_char(')');
+                }
+            }
         }
     }
 
@@ -507,6 +710,10 @@ pub(crate) fn write_select<W: SqlWriter>(w: &mut W, select: &Select) {
         write_expr(w, &having);
     }
 
+    write_select_tail(w, select);
+}
+
+fn write_select_tail<W: SqlWriter>(w: &mut W, select: &Select) {
     if !select.orders.is_empty() {
         w.push_str(" ORDER BY ");
         for (i, order) in select.orders.iter().enumerate() {

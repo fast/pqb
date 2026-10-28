@@ -13,14 +13,6 @@
 // limitations under the License.
 
 use crate::SqlWriterValues;
-use crate::query::Delete;
-use crate::query::Insert;
-use crate::query::Select;
-use crate::query::Update;
-use crate::query::write_delete;
-use crate::query::write_insert;
-use crate::query::write_select;
-use crate::query::write_update;
 use crate::writer::SqlWriter;
 
 /// Explain a SQL statement.
@@ -170,39 +162,8 @@ impl Explain {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
-#[non_exhaustive]
-#[expect(missing_docs)]
-pub enum ExplainableStatement {
-    Select(Select),
-    Insert(Insert),
-    Update(Update),
-    Delete(Delete),
-}
-
-impl From<Select> for ExplainableStatement {
-    fn from(s: Select) -> Self {
-        ExplainableStatement::Select(s)
-    }
-}
-
-impl From<Insert> for ExplainableStatement {
-    fn from(i: Insert) -> Self {
-        ExplainableStatement::Insert(i)
-    }
-}
-
-impl From<Update> for ExplainableStatement {
-    fn from(u: Update) -> Self {
-        ExplainableStatement::Update(u)
-    }
-}
-
-impl From<Delete> for ExplainableStatement {
-    fn from(d: Delete) -> Self {
-        ExplainableStatement::Delete(d)
-    }
-}
+/// A statement accepted by EXPLAIN.
+pub type ExplainableStatement = crate::query::Statement;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Format {
@@ -347,11 +308,6 @@ fn write_explain<W: SqlWriter>(w: &mut W, explain: &Explain) {
 
     if let Some(statement) = &explain.statement {
         w.push_str(" ");
-        match statement {
-            ExplainableStatement::Select(s) => write_select(w, s),
-            ExplainableStatement::Insert(i) => write_insert(w, i),
-            ExplainableStatement::Update(u) => write_update(w, u),
-            ExplainableStatement::Delete(d) => write_delete(w, d),
-        }
+        crate::query::write_statement(w, statement);
     }
 }

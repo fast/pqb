@@ -13,7 +13,8 @@
 // limitations under the License.
 
 use crate::query::Select;
-use crate::query::write_select;
+use crate::query::Statement;
+use crate::query::write_statement;
 use crate::types::Iden;
 use crate::types::IntoIden;
 use crate::types::write_iden;
@@ -23,12 +24,19 @@ use crate::value::Value;
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct With {
     ctes: Vec<CommonTableExpression>,
+    recursive: bool,
 }
 
 impl With {
     /// Constructs a new WITH Clause.
     pub fn new() -> Self {
         Self::default()
+    }
+
+    /// Allow CTEs to reference themselves using WITH RECURSIVE.
+    pub fn recursive(mut self) -> Self {
+        self.recursive = true;
+        self
     }
 
     /// Adds a common table expression to this with clause.
@@ -63,13 +71,28 @@ impl CommonTableExpression {
 
     /// Sets the CTE VALUES source.
     pub fn values(mut self, values: Vec<Vec<Value>>) -> Self {
+        assert!(
+            !values.is_empty() && !values[0].is_empty(),
+            "CTE VALUES requires nonempty rows"
+        );
+        assert!(
+            values.iter().all(|row| row.len() == values[0].len()),
+            "CTE VALUES rows must have equal widths"
+        );
         self.query = Query::Values(values);
         self
     }
 
     /// Sets the CTE SELECT source.
-    pub fn select(mut self, select: Select) -> Self {
-        self.query = Query::Select(Box::new(select));
+    pub fn select(self, select: Select) -> Self {
+        self.query(select)
+    }
+
+    /// Set a SELECT, INSERT, UPDATE or DELETE source.
+    ///
+    /// A data-modifying CTE needs RETURNING if its output is referenced by the outer query.
+    pub fn query(mut self, query: impl Into<Statement>) -> Self {
+        self.query = Query::Statement(Box::new(query.into()));
         self
     }
 
@@ -102,12 +125,18 @@ impl CommonTableExpression {
 
 #[derive(Debug, Clone, PartialEq)]
 enum Query {
-    Select(Box<Select>),
+    Statement(Box<Statement>),
     Values(Vec<Vec<Value>>),
 }
 
 pub(crate) fn write_with<W: crate::writer::SqlWriter>(w: &mut W, with: &With) {
+    if with.ctes.is_empty() {
+        return;
+    }
     w.push_str("WITH ");
+    if with.recursive {
+        w.push_str("RECURSIVE ");
+    }
     for (i, cte) in with.ctes.iter().enumerate() {
         if i > 0 {
             w.push_str(", ");
@@ -134,12 +163,13 @@ pub(crate) fn write_with<W: crate::writer::SqlWriter>(w: &mut W, with: &With) {
             }
         }
         match &cte.query {
-            Query::Select(select) => {
+            Query::Statement(query) => {
                 w.push_char('(');
-                write_select(w, select);
+                write_statement(w, query);
                 w.push_char(')');
             }
             Query::Values(values) => {
+                assert!(!values.is_empty(), "CTE requires a query or VALUES source");
                 w.push_str("(VALUES ");
                 for (j, row) in values.iter().enumerate() {
                     if j > 0 {
