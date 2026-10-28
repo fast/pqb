@@ -84,6 +84,7 @@ impl DropTable {
 }
 
 fn write_drop_table<W: SqlWriter>(w: &mut W, drop_table: &DropTable) {
+    assert!(!drop_table.tables.is_empty(), "DROP TABLE requires a table");
     w.push_str("DROP TABLE ");
     if drop_table.if_exists {
         w.push_str("IF EXISTS ");

@@ -117,7 +117,7 @@ fn create_index_if_not_exists_custom_method() {
             .using("hnsw")
             .to_sql()
             .validate(),
-        @r#"CREATE INDEX IF NOT EXISTS "idx_tokens_value_hnsw" ON "tokens" USING hnsw ("value")"#
+        @r#"CREATE INDEX IF NOT EXISTS "idx_tokens_value_hnsw" ON "tokens" USING "hnsw" ("value")"#
     );
 }
 

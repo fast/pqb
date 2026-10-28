@@ -68,9 +68,9 @@ impl OnConflict {
     }
 
     /// Set ON CONSTRAINT target constraint name.
-    pub fn constraint(constraint: impl Into<String>) -> Self {
+    pub fn constraint(constraint: impl IntoIden) -> Self {
         OnConflict {
-            targets: OnConflictTarget::Constraint(constraint.into().into_iden()),
+            targets: OnConflictTarget::Constraint(constraint.into_iden()),
             target_conditions: vec![],
             action: None,
             action_conditions: vec![],

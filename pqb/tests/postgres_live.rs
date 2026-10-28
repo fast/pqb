@@ -240,6 +240,7 @@ async fn postgres_executes_bound_queries_and_relational_workflows() -> Result<()
         .constraint(TableConstraint::check(Expr::column("amount").gte(0)))
         .constraint(
             ForeignKey::new(["account_id"], "accounts", ["id"])
+                .name("payments_account")
                 .on_delete(ReferentialAction::Cascade),
         );
     client.batch_execute(&payments.to_sql()).await?;
@@ -311,11 +312,24 @@ async fn postgres_executes_bound_queries_and_relational_workflows() -> Result<()
             .get::<_, i64>(0),
         5
     );
-    let index = pqb::index::CreateIndex::new().table("payments").expr(
-        pqb::expr::Case::new(Expr::column("status").eq("paid"), Expr::column("amount"))
-            .otherwise(0),
-    );
+    let method = String::from("btree");
+    let index = pqb::index::CreateIndex::new()
+        .name("payments_amount_idx")
+        .table("payments")
+        .using(method.as_str())
+        .expr(
+            pqb::expr::Case::new(Expr::column("status").eq("paid"), Expr::column("amount"))
+                .otherwise(0),
+        );
     client.batch_execute(&index.to_sql()).await?;
+    client
+        .batch_execute(
+            &pqb::index::DropIndex::new()
+                .index("payments_amount_idx")
+                .concurrently()
+                .to_sql(),
+        )
+        .await?;
 
     let latest = Select::new()
         .column("amount")

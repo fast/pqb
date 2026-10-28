@@ -154,3 +154,55 @@ fn temporal_and_decimal_literals() {
         "SELECT '2026-10-28'::date, '2026-10-28T04:34:56+00:00'::timestamptz, 123.45"
     );
 }
+
+#[test]
+fn ddl_rejects_incomplete_actions_and_inapplicable_options() {
+    use std::panic::catch_unwind;
+
+    use pqb::index::DropIndex;
+    use pqb::table::AlterTable;
+
+    assert!(
+        catch_unwind(|| AlterTable::new()
+            .table("events")
+            .add_column(ColumnDef::new("id"))
+            .to_sql())
+        .is_err()
+    );
+    assert!(
+        catch_unwind(|| AlterTable::new()
+            .table("events")
+            .modify_column(ColumnDef::new("id"))
+            .to_sql())
+        .is_err()
+    );
+    assert!(
+        catch_unwind(|| DropIndex::new()
+            .index("idx")
+            .concurrently()
+            .cascade()
+            .to_sql())
+        .is_err()
+    );
+    assert!(
+        catch_unwind(|| DropIndex::new()
+            .indexes(["one", "two"])
+            .concurrently()
+            .to_sql())
+        .is_err()
+    );
+    assert!(
+        catch_unwind(|| CreateTable::new()
+            .table("events")
+            .primary_key(CreateIndex::new().expr(Expr::column("id").add(1)))
+            .to_sql())
+        .is_err()
+    );
+    assert!(
+        catch_unwind(|| CreateTable::new()
+            .table("events")
+            .primary_key(CreateIndex::new().column("id").concurrently())
+            .to_sql())
+        .is_err()
+    );
+}

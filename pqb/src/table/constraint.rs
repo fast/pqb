@@ -90,6 +90,7 @@ pub enum ReferentialAction {
 /// A foreign key referencing columns of another table.
 #[derive(Debug, Clone)]
 pub struct ForeignKey {
+    name: Option<Iden>,
     columns: Vec<Iden>,
     table: TableName,
     referenced: Vec<Iden>,
@@ -115,6 +116,7 @@ impl ForeignKey {
             "foreign key column counts must match"
         );
         Self {
+            name: None,
             columns,
             table: table.into(),
             referenced,
@@ -136,15 +138,16 @@ impl ForeignKey {
     }
 
     /// Name this foreign key constraint.
-    pub fn name(self, name: impl IntoIden) -> TableConstraint {
-        TableConstraint::from(self).name(name)
+    pub fn name(mut self, name: impl IntoIden) -> Self {
+        self.name = Some(name.into_iden());
+        self
     }
 }
 
 impl From<ForeignKey> for TableConstraint {
-    fn from(key: ForeignKey) -> Self {
+    fn from(mut key: ForeignKey) -> Self {
         Self {
-            name: None,
+            name: key.name.take(),
             kind: ConstraintKind::ForeignKey(key),
         }
     }

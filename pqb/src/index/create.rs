@@ -18,6 +18,8 @@ use crate::SqlWriterValues;
 use crate::expr::Expr;
 use crate::expr::write_expr;
 use crate::expr::write_tuple;
+use crate::types::ColumnName;
+use crate::types::ColumnRef;
 use crate::types::Iden;
 use crate::types::IntoIden;
 use crate::types::TableRef;
@@ -211,23 +213,20 @@ pub enum IndexMethod {
     Gist,
     /// BRIN index method.
     Brin,
-    /// Custom index method.
+    /// Custom index method, quoted as an identifier.
     Custom(Cow<'static, str>),
 }
 
 impl IndexMethod {
-    /// Create a custom index method.
-    pub fn custom<T>(method: T) -> Self
-    where
-        T: Into<Cow<'static, str>>,
-    {
-        Self::Custom(method.into())
+    /// Create a custom index method, quoted as an identifier.
+    pub fn custom(method: impl Into<String>) -> Self {
+        Self::Custom(Cow::Owned(method.into()))
     }
 }
 
-impl From<&'static str> for IndexMethod {
-    fn from(value: &'static str) -> Self {
-        IndexMethod::Custom(Cow::Borrowed(value))
+impl From<&str> for IndexMethod {
+    fn from(value: &str) -> Self {
+        IndexMethod::Custom(Cow::Owned(value.to_owned()))
     }
 }
 
@@ -319,6 +318,22 @@ fn write_create_index<W: SqlWriter>(w: &mut W, index: &CreateIndex) {
 
 /// Write table index definition inside CREATE TABLE statement.
 pub(crate) fn write_table_index<W: SqlWriter>(w: &mut W, index: &CreateIndex) {
+    assert!(
+        !index.columns.is_empty()
+            && index.columns.iter().all(|column| matches!(
+                column,
+                Expr::Column(ColumnRef::Column(ColumnName(None, _)))
+            )),
+        "table key constraints require unqualified column names"
+    );
+    assert!(
+        index.table.is_none()
+            && index.method.is_none()
+            && index.predicate.is_none()
+            && !index.concurrently
+            && !index.if_not_exists,
+        "table key constraints do not support standalone index options"
+    );
     if let Some(name) = &index.name {
         w.push_str("CONSTRAINT ");
         write_iden(w, name);
@@ -371,7 +386,7 @@ fn write_index_method<W: SqlWriter>(w: &mut W, method: &IndexMethod) {
         IndexMethod::Hash => w.push_str("hash"),
         IndexMethod::Gist => w.push_str("gist"),
         IndexMethod::Brin => w.push_str("brin"),
-        IndexMethod::Custom(name) => w.push_str(name),
+        IndexMethod::Custom(name) => write_iden(w, &name.as_ref().into_iden()),
     }
 }
 

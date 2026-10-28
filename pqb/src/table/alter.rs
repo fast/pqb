@@ -155,7 +155,8 @@ impl AlterTable {
 
     /// Modify a column's type, nullability, default or key constraints.
     ///
-    /// Panics when rendering a generated or identity definition; use ADD COLUMN for those.
+    /// Panics when rendering an empty change or a generated or identity definition; use ADD COLUMN
+    /// for generated and identity columns.
     pub fn modify_column(mut self, column: ColumnDef) -> Self {
         self.options.push(TableAlterOption::ModifyColumn(column));
         self
@@ -279,6 +280,7 @@ fn write_alter_table<W: SqlWriter>(w: &mut W, alter: &AlterTable) {
                 column,
                 if_not_exists,
             }) => {
+                assert!(column.ty.is_some(), "ADD COLUMN requires a column type");
                 w.push_str("ADD COLUMN ");
                 if *if_not_exists {
                     w.push_str("IF NOT EXISTS ");
@@ -351,7 +353,7 @@ fn write_alter_table<W: SqlWriter>(w: &mut W, alter: &AlterTable) {
                     w.push_str(")");
                 }
 
-                let _ = is_first;
+                assert!(!is_first, "modify_column requires a change");
             }
             TableAlterOption::RenameColumn(from, to) => {
                 w.push_str("RENAME COLUMN ");

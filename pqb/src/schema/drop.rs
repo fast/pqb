@@ -84,6 +84,10 @@ impl DropSchema {
 }
 
 fn write_drop_schema<W: SqlWriter>(w: &mut W, drop_schema: &DropSchema) {
+    assert!(
+        !drop_schema.schemas.is_empty(),
+        "DROP SCHEMA requires a schema"
+    );
     w.push_str("DROP SCHEMA ");
     if drop_schema.if_exists {
         w.push_str("IF EXISTS ");
