@@ -73,7 +73,8 @@ pub enum ArrayError {
         /// Number of elements supplied.
         actual: usize,
     },
-    /// An element (including typed NULL) does not match the declared array type.
+    /// An element (including typed NULL) is incompatible with the declared array type.
+    /// Unsigned integers must also fit the corresponding signed PostgreSQL type.
     ElementType {
         /// Zero-based position in the flat element list.
         index: usize,
@@ -96,7 +97,7 @@ impl std::fmt::Display for ArrayError {
             }
             Self::ElementType { index, expected } => write!(
                 f,
-                "array element {index} does not match {}",
+                "array element {index} cannot be represented as {}",
                 expected.sql_name()
             ),
         }
@@ -107,7 +108,8 @@ impl std::error::Error for ArrayError {}
 
 impl ArrayValue {
     /// Validate and create an array. Dimensions accept lengths (lower bound 1),
-    /// `(length, lower_bound)` pairs or [`ArrayDimension`] values.
+    /// `(length, lower_bound)` pairs or [`ArrayDimension`] values. Unsigned integers must fit the
+    /// corresponding signed PostgreSQL type; in particular, `u64` values must fit `bigint`.
     ///
     /// ```
     /// use pqb::value::ArrayType;
@@ -193,6 +195,7 @@ impl From<ArrayValue> for Value {
 impl ArrayType {
     fn of_value(value: &Value) -> Option<Self> {
         Some(match value {
+            Value::BigUnsigned(Some(value)) if *value > i64::MAX as u64 => return None,
             Value::TinyInt(_) | Value::TinyUnsigned(_) | Value::SmallInt(_) => Self::SmallInt,
             Value::SmallUnsigned(_) | Value::Int(_) => Self::Int,
             Value::Unsigned(_) | Value::BigUnsigned(_) | Value::BigInt(_) => Self::BigInt,

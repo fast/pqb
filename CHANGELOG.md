@@ -17,7 +17,7 @@
 - Build MERGE with ordered conditional update, delete and insert actions on PostgreSQL 15+. RETURNING, use as a CTE, and NOT MATCHED BY SOURCE require PostgreSQL 17+.
 - Build COPY commands for text, CSV and binary streams, query exports and server files or programs. COPY transport and row encoding remain the driver's responsibility.
 - Create schemas, identity columns, named relational constraints, and RANGE, LIST and HASH partitions; attach, detach, and subpartition tables, including PostgreSQL 14+ concurrent detach.
-- Add binary, date/time and decimal values, typed empty and NULL arrays, and validated multidimensional arrays with nullable elements and explicit lower bounds. Fixed-offset timestamps preserve their instant in UTC.
+- Add binary, date/time and decimal values, typed empty and NULL arrays, and validated multidimensional arrays with nullable elements and explicit lower bounds. Multidimensional array validation rejects unsigned values outside the declared SQL type's range. Fixed-offset timestamps preserve their instant in UTC.
 - Accept runtime identifier strings and iterator-based CTE rows; expose a shared `Statement` for CTEs and EXPLAIN.
 
 ### Bug fixes

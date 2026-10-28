@@ -149,6 +149,13 @@ fn value_checks() -> Select {
             "integer[]",
             "'{}'::integer[]",
         ),
+        (
+            ArrayValue::new(ArrayType::BigInt, [1], [i64::MAX as u64])
+                .unwrap()
+                .into(),
+            "bigint[]",
+            "'{9223372036854775807}'::bigint[]",
+        ),
         (Option::<i32>::None.into(), "integer", "NULL::integer"),
         (
             f64::NAN.into(),

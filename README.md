@@ -91,7 +91,7 @@ let query = Select::new().expr(matrix).expr(shifted).to_values();
 // Each array occupies one parameter and retains its shape and lower bounds.
 ```
 
-`ArrayValue::new` returns `ArrayError` for mismatched shape, incompatible elements, overflowing bounds or more than six dimensions. Zero-length axes become PostgreSQL's canonical empty array; use `Value::null_array` for a NULL array. Inline SQL preserves dimensions and lower bounds too.
+`ArrayValue::new` returns `ArrayError` for mismatched shape, incompatible elements, overflowing bounds or more than six dimensions. Unsigned elements must fit their corresponding signed SQL type, so `u64` values must fit `bigint`. Zero-length axes become PostgreSQL's canonical empty array; use `Value::null_array` for a NULL array. Inline SQL preserves dimensions and lower bounds too.
 
 ## Compose queries
 

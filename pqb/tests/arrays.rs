@@ -54,6 +54,11 @@ fn arrays_validate_shape_bounds_and_element_types() {
         ),
         Err(ArrayError::ElementType { index: 1, .. })
     ));
+    assert!(ArrayValue::new(ArrayType::BigInt, [1], [i64::MAX as u64]).is_ok());
+    assert!(matches!(
+        ArrayValue::new(ArrayType::BigInt, [1], [i64::MAX as u64 + 1]),
+        Err(ArrayError::ElementType { index: 0, .. })
+    ));
     let empty = ArrayValue::new(ArrayType::Int, [2, 0, 3], Vec::<i32>::new()).unwrap();
     assert!(empty.dimensions().is_empty());
     assert!(empty.values().is_empty());
