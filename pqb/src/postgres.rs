@@ -28,10 +28,40 @@ impl SqlWriterValues {
     /// Borrow parameters for `tokio_postgres::Client` or `postgres::Client`.
     ///
     /// Keep this bound query alive until the driver finishes using these references.
+    /// The prepared statement or SQL context must determine parameter types. For queries such as
+    /// `SELECT $1`, use [`Self::postgres_typed_params`] with the driver's `query_typed` method.
     pub fn postgres_params(&self) -> Vec<&(dyn ToSql + Sync)> {
         self.values()
             .iter()
             .map(|value| value as &(dyn ToSql + Sync))
+            .collect()
+    }
+
+    /// Borrow parameters together with their PostgreSQL types for the driver's `query_typed`.
+    ///
+    /// Types come from the Rust values, including typed NULLs and arrays, so a standalone value
+    /// does not need a SQL cast. Returns an error for untyped empty or NULL arrays; use
+    /// [`Value::typed_array`] or [`Value::null_array`] for those. Encoding errors, including
+    /// integer overflow and mismatched array elements, are reported by the driver.
+    pub fn postgres_typed_params(&self) -> Result<Vec<(&(dyn ToSql + Sync), Type)>, Error> {
+        self.values()
+            .iter()
+            .map(|value| {
+                let ty = match value {
+                    Value::Array(values) => values
+                        .as_ref()
+                        .and_then(|values| values.first())
+                        .and_then(ArrayType::of_value)
+                        .ok_or("cannot infer array element type; use Value::typed_array or Value::null_array")?
+                        .postgres_types().1,
+                    Value::TypedArray(ty, _) => ty.postgres_types().1,
+                    Value::MultidimensionalArray(array) => array.ty.postgres_types().1,
+                    value => ArrayType::of_value(value)
+                        .ok_or("cannot infer PostgreSQL parameter type")?
+                        .postgres_types().0,
+                };
+                Ok((value as &(dyn ToSql + Sync), ty))
+            })
             .collect()
     }
 }
@@ -46,13 +76,14 @@ impl ToSql for Value {
             Value::BigUnsigned(v) => v.map(i64::try_from).transpose()?.to_sql_checked(ty, out),
             Value::Array(v) => v.to_sql_checked(ty, out),
             Value::TypedArray(element, values) => {
-                if !matches!(ty.kind(), Kind::Array(inner) if *inner == element.postgres_type()) {
+                if !matches!(ty.kind(), Kind::Array(inner) if *inner == element.postgres_types().0)
+                {
                     return Err(format!("expected {}[], got {ty}", element.sql_name()).into());
                 }
                 values.to_sql_checked(ty, out)
             }
             Value::MultidimensionalArray(array) => {
-                let element = array.ty.postgres_type();
+                let element = array.ty.postgres_types().0;
                 if !matches!(ty.kind(), Kind::Array(inner) if *inner == element) {
                     return Err(format!("expected {}[], got {ty}", array.ty.sql_name()).into());
                 }
@@ -111,30 +142,30 @@ impl ToSql for Value {
 }
 
 impl ArrayType {
-    fn postgres_type(self) -> Type {
+    fn postgres_types(self) -> (Type, Type) {
         match self {
-            Self::Bool => Type::BOOL,
-            Self::SmallInt => Type::INT2,
-            Self::Int => Type::INT4,
-            Self::BigInt => Type::INT8,
-            Self::Float => Type::FLOAT4,
-            Self::Double => Type::FLOAT8,
-            Self::Text => Type::TEXT,
-            Self::Bytes => Type::BYTEA,
+            Self::Bool => (Type::BOOL, Type::BOOL_ARRAY),
+            Self::SmallInt => (Type::INT2, Type::INT2_ARRAY),
+            Self::Int => (Type::INT4, Type::INT4_ARRAY),
+            Self::BigInt => (Type::INT8, Type::INT8_ARRAY),
+            Self::Float => (Type::FLOAT4, Type::FLOAT4_ARRAY),
+            Self::Double => (Type::FLOAT8, Type::FLOAT8_ARRAY),
+            Self::Text => (Type::TEXT, Type::TEXT_ARRAY),
+            Self::Bytes => (Type::BYTEA, Type::BYTEA_ARRAY),
             #[cfg(feature = "with-json")]
-            Self::Json => Type::JSONB,
+            Self::Json => (Type::JSONB, Type::JSONB_ARRAY),
             #[cfg(feature = "with-uuid")]
-            Self::Uuid => Type::UUID,
+            Self::Uuid => (Type::UUID, Type::UUID_ARRAY),
             #[cfg(feature = "with-chrono")]
-            Self::Date => Type::DATE,
+            Self::Date => (Type::DATE, Type::DATE_ARRAY),
             #[cfg(feature = "with-chrono")]
-            Self::Time => Type::TIME,
+            Self::Time => (Type::TIME, Type::TIME_ARRAY),
             #[cfg(feature = "with-chrono")]
-            Self::Timestamp => Type::TIMESTAMP,
+            Self::Timestamp => (Type::TIMESTAMP, Type::TIMESTAMP_ARRAY),
             #[cfg(feature = "with-chrono")]
-            Self::TimestampWithTimeZone => Type::TIMESTAMPTZ,
+            Self::TimestampWithTimeZone => (Type::TIMESTAMPTZ, Type::TIMESTAMPTZ_ARRAY),
             #[cfg(feature = "with-rust_decimal")]
-            Self::Decimal => Type::NUMERIC,
+            Self::Decimal => (Type::NUMERIC, Type::NUMERIC_ARRAY),
         }
     }
 }

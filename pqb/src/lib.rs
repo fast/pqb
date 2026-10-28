@@ -54,7 +54,7 @@
 //! use pqb::query::Select;
 //! let query = Select::new().column("name").from("users")
 //!     .and_where(Expr::column("id").eq(42_i64)).to_values();
-//! let rows = client.query(query.sql(), &query.postgres_params()).await?;
+//! let rows = client.query_typed(query.sql(), &query.postgres_typed_params()?).await?;
 //! # let _ = rows;
 //! # Ok(())
 //! # }

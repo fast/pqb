@@ -909,3 +909,31 @@ async fn postgres_preserves_from_and_join_scope() -> Result<(), Error> {
     connection.await??;
     Ok(())
 }
+
+#[tokio::test]
+#[ignore = "requires PQB_TEST_DATABASE_URL"]
+async fn postgres_binds_values_without_sql_type_context() -> Result<(), Error> {
+    let (client, connection) =
+        tokio_postgres::connect(&database_url(), tokio_postgres::NoTls).await?;
+    let connection = tokio::spawn(connection);
+    let matrix = ArrayValue::new(ArrayType::Int, [2, 2], [1, 2, 3, 4])?;
+    let bound = Select::new()
+        .expr(42)
+        .expr(Option::<i32>::None)
+        .expr(Value::typed_array(ArrayType::Int, Vec::<i32>::new()))
+        .expr(Value::array([1, 2]))
+        .expr(FunctionCall::custom("array_dims", [Value::from(matrix)]))
+        .to_values();
+    let rows = client
+        .query_typed(bound.sql(), &bound.postgres_typed_params()?)
+        .await?;
+    let row = &rows[0];
+    assert_eq!(row.get::<_, i32>(0), 42);
+    assert_eq!(row.get::<_, Option<i32>>(1), None);
+    assert!(row.get::<_, Vec<i32>>(2).is_empty());
+    assert_eq!(row.get::<_, Vec<i32>>(3), [1, 2]);
+    assert_eq!(row.get::<_, String>(4), "[1:2][1:2]");
+    drop(client);
+    connection.await??;
+    Ok(())
+}

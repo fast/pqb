@@ -14,7 +14,6 @@
 
 #![cfg(any(feature = "postgres", feature = "sqlx"))]
 
-#[cfg(feature = "sqlx")]
 use pqb::query::Select;
 use pqb::value::ArrayType;
 use pqb::value::Value;
@@ -25,6 +24,13 @@ fn postgres_reports_overflow_and_element_type_mismatch() {
     use bytes::BytesMut;
     use postgres_types::ToSql;
     use postgres_types::Type;
+    assert!(
+        Select::new()
+            .expr(Value::array(Vec::<i32>::new()))
+            .to_values()
+            .postgres_typed_params()
+            .is_err()
+    );
     let mut output = BytesMut::new();
     assert!(
         Value::from(u64::MAX)

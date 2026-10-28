@@ -67,7 +67,7 @@ Features compose: for example, `cargo add pqb --features postgres,with-json,with
 
 ### tokio-postgres and postgres
 
-With the `postgres` feature, `Value` implements `postgres_types::ToSql`. `postgres_params()` borrows the ordered parameters for either driver's query methods.
+With the `postgres` feature, `Value` implements `postgres_types::ToSql`. `postgres_typed_params()` borrows the ordered parameters with their PostgreSQL types for either driver's `query_typed` method. Types come from the Rust values, so even `SELECT $1` works without a SQL cast.
 
 ```rust,no_run
 # #[cfg(feature = "postgres")]
@@ -80,13 +80,13 @@ let bound = Select::new()
     .from("users")
     .and_where(Expr::column("id").eq(42_i64))
     .to_values();
-let rows = client.query(bound.sql(), &bound.postgres_params()).await?;
+let rows = client.query_typed(bound.sql(), &bound.postgres_typed_params()?).await?;
 # let _ = rows;
 # Ok(())
 # }
 ```
 
-For synchronous `postgres::Client`, use the same arguments without `.await`.
+For synchronous `postgres::Client`, use the same arguments without `.await`. Use `postgres_params()` with `query` or `execute` when a prepared statement or the SQL context already determines the parameter types. An untyped empty or NULL array needs that context; prefer `Value::typed_array` or `Value::null_array` with `query_typed`.
 
 ### SQLx
 
@@ -278,7 +278,7 @@ let query = Select::new()
     ));
 ```
 
-`CommonTableExpression::expr_values` accepts expression rows, including casts when a driver needs explicit parameter type information. Set operations combine complete operands, including their own limits and ordering. Calling `order_by`, `limit`, or `offset` afterwards applies to the combined result. To filter or project that result, use `Select::new().from_subquery(combined, "result")`. `combine(SetOperator::IntersectAll, other)` and `combine(SetOperator::ExceptAll, other)` expose the remaining forms.
+`CommonTableExpression::expr_values` accepts expression rows, including casts for SQL type coercion. With the native driver, `postgres_typed_params()` supplies parameter types without needing casts. Set operations combine complete operands, including their own limits and ordering. Calling `order_by`, `limit`, or `offset` afterwards applies to the combined result. To filter or project that result, use `Select::new().from_subquery(combined, "result")`. `combine(SetOperator::IntersectAll, other)` and `combine(SetOperator::ExceptAll, other)` expose the remaining forms.
 
 ### Windowed aggregates
 
