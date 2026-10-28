@@ -19,9 +19,11 @@ mod column;
 mod constraint;
 mod create;
 mod drop;
+mod partition;
 
 pub use self::alter::*;
 pub use self::column::*;
 pub use self::constraint::*;
 pub use self::create::*;
 pub use self::drop::*;
+pub use self::partition::*;

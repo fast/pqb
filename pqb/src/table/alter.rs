@@ -16,15 +16,19 @@ use crate::SqlWriterValues;
 use crate::expr::write_expr;
 use crate::table::ColumnDef;
 use crate::table::ColumnValue;
+use crate::table::PartitionBound;
 use crate::table::TableConstraint;
 use crate::table::write_column_spec;
 use crate::table::write_column_type;
 use crate::table::write_constraint;
+use crate::table::write_partition_bound;
 use crate::types::Iden;
 use crate::types::IntoIden;
 use crate::types::IntoTableRef;
+use crate::types::TableName;
 use crate::types::TableRef;
 use crate::types::write_iden;
+use crate::types::write_table_name;
 use crate::types::write_table_ref;
 use crate::writer::SqlWriter;
 
@@ -114,6 +118,41 @@ impl AlterTable {
         self
     }
 
+    /// Attach an existing table as a partition. Must be the only ALTER TABLE action.
+    pub fn attach_partition(mut self, table: impl Into<TableName>, bound: PartitionBound) -> Self {
+        self.options
+            .push(TableAlterOption::AttachPartition(table.into(), bound));
+        self
+    }
+
+    /// Detach a partition, leaving it as an independent table. Must be the only action.
+    pub fn detach_partition(mut self, table: impl Into<TableName>) -> Self {
+        self.options.push(TableAlterOption::DetachPartition(
+            table.into(),
+            DetachMode::Normal,
+        ));
+        self
+    }
+
+    /// Detach with a reduced parent lock (PostgreSQL 14+), outside a transaction block.
+    /// PostgreSQL rejects this when the parent has a default partition.
+    pub fn detach_partition_concurrently(mut self, table: impl Into<TableName>) -> Self {
+        self.options.push(TableAlterOption::DetachPartition(
+            table.into(),
+            DetachMode::Concurrently,
+        ));
+        self
+    }
+
+    /// Complete a previously interrupted concurrent detach (PostgreSQL 14+).
+    pub fn finalize_detach_partition(mut self, table: impl Into<TableName>) -> Self {
+        self.options.push(TableAlterOption::DetachPartition(
+            table.into(),
+            DetachMode::Finalize,
+        ));
+        self
+    }
+
     /// Modify a column's type, nullability, default or key constraints.
     ///
     /// Panics when rendering a generated or identity definition; use ADD COLUMN for those.
@@ -152,6 +191,8 @@ impl AlterTable {
 #[derive(Debug, Clone)]
 #[allow(clippy::enum_variant_names)] // add_foreign_key, drop_foreign_key, ...
 enum TableAlterOption {
+    AttachPartition(TableName, PartitionBound),
+    DetachPartition(TableName, DetachMode),
     AddConstraint(TableConstraint),
     DropConstraint(Iden),
     DropDefault(Iden),
@@ -159,6 +200,13 @@ enum TableAlterOption {
     ModifyColumn(ColumnDef),
     RenameColumn(Iden, Iden),
     DropColumn(DropColumnOption),
+}
+
+#[derive(Debug, Clone, Copy)]
+enum DetachMode {
+    Normal,
+    Concurrently,
+    Finalize,
 }
 
 #[derive(Debug, Clone)]
@@ -181,11 +229,13 @@ fn write_alter_table<W: SqlWriter>(w: &mut W, alter: &AlterTable) {
     assert!(!alter.options.is_empty(), "ALTER TABLE requires an action");
     assert!(
         alter.options.len() == 1
-            || !alter
-                .options
-                .iter()
-                .any(|o| matches!(o, TableAlterOption::RenameColumn(..))),
-        "RENAME COLUMN must be a separate ALTER TABLE statement"
+            || !alter.options.iter().any(|o| matches!(
+                o,
+                TableAlterOption::RenameColumn(..)
+                    | TableAlterOption::AttachPartition(..)
+                    | TableAlterOption::DetachPartition(..)
+            )),
+        "RENAME COLUMN and partition actions must be separate ALTER TABLE statements"
     );
     w.push_str("ALTER TABLE ");
     if let Some(table) = &alter.table {
@@ -197,6 +247,21 @@ fn write_alter_table<W: SqlWriter>(w: &mut W, alter: &AlterTable) {
             w.push_str(", ");
         }
         match option {
+            TableAlterOption::AttachPartition(table, bound) => {
+                w.push_str("ATTACH PARTITION ");
+                write_table_name(w, table);
+                w.push_char(' ');
+                write_partition_bound(w, bound);
+            }
+            TableAlterOption::DetachPartition(table, mode) => {
+                w.push_str("DETACH PARTITION ");
+                write_table_name(w, table);
+                w.push_str(match mode {
+                    DetachMode::Normal => "",
+                    DetachMode::Concurrently => " CONCURRENTLY",
+                    DetachMode::Finalize => " FINALIZE",
+                });
+            }
             TableAlterOption::AddConstraint(constraint) => {
                 w.push_str("ADD ");
                 write_constraint(w, constraint);

@@ -151,7 +151,7 @@ Adapters support homogeneous, one-dimensional arrays with nullable elements. `Va
 | Aggregation | Aggregate `DISTINCT`, input ordering, `FILTER`, window partition/order/frame |
 | Writes | Multi-row insert, insert from select, default values, upsert, update from, delete using, MERGE, aliased returning |
 | PostgreSQL operations | COPY text/CSV/binary, row locks, `NOWAIT`, `SKIP LOCKED`, table sampling, `EXPLAIN` options |
-| DDL | Create/alter/drop tables, identity/generated columns, relational constraints, create/drop indexes and schemas |
+| DDL | Create/alter/drop tables, identity/generated columns, relational constraints, create/drop indexes and schemas, RANGE/LIST/HASH partition management |
 
 ### MERGE
 
@@ -194,7 +194,28 @@ let command = Copy::from_table("events")
 
 COPY commands inline escaped literals; `to_values()` returns no parameters. Transfer rows using the driver's COPY API, not its ordinary query method. PQB does not serialize CSV or binary COPY records. CSV headers work on PostgreSQL 14; text headers require 15+. To export a partitioned table's rows, use a SELECT through `from_query`.
 
+### Partition management
+
+Create partitioned tables with `CreateTable::partition_by`, and children with `partition_of`. Both can be combined for subpartitioning. `PartitionBound` supports RANGE endpoints (including `PartitionValue::MinValue`/`MaxValue`), LIST values (including NULL), HASH modulus/remainder and DEFAULT partitions. Keys can be columns or expressions.
+
+```rust
+use pqb::expr::Expr;
+use pqb::table::{AlterTable, ColumnDef, CreateTable, PartitionBound, PartitionBy};
+
+let parent = CreateTable::new().table("events")
+    .column(ColumnDef::new("id").bigint())
+    .partition_by(PartitionBy::range([Expr::column("id")])).to_sql();
+let child = CreateTable::new().table("events_first")
+    .partition_of("events", PartitionBound::range([0_i64], [1000_i64])).to_sql();
+let detach = AlterTable::new().table("events").detach_partition("events_first").to_sql();
+let attach = AlterTable::new().table("events")
+    .attach_partition("events_first", PartitionBound::range([0_i64], [1000_i64])).to_sql();
+```
+
+Partition operations inline literals, like other DDL. Attach/detach must be separate ALTER TABLE commands. `detach_partition_concurrently` (PostgreSQL 14+) must run outside a transaction block and requires no default partition; `finalize_detach_partition` completes an interrupted detach. PostgreSQL validates existing rows, overlapping bounds and key types. Detaching preserves the child table and its data; use `DropTable` to remove it explicitly.
+
 ### Dynamic predicates
+
 
 
 
@@ -297,7 +318,7 @@ Builders reject basic structural mistakes such as missing mutation targets or in
 
 The test suite parses generated SQL with PostgreSQL's parser. CI also executes representative relational workflows and parameter roundtrips through both drivers on PostgreSQL 14 and 18. Version-specific features require their corresponding server: negative numeric scales and scales exceeding precision require PostgreSQL 15+, and virtual generated columns require PostgreSQL 18+.
 
-PQB does not yet have dedicated builders for partition management, or every extension-specific SQL construct. Use explicit trusted SQL where the structured API does not cover a statement. PQB does not implement an ORM, migration runner, or connection management.
+PQB does not model every extension-specific SQL construct. Use explicit trusted SQL where the structured API does not cover a statement. PQB does not implement an ORM, migration runner, or connection management.
 
 ## Compatibility notes
 
