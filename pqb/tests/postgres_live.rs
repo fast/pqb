@@ -42,6 +42,7 @@ use pqb::table::ReferentialAction;
 use pqb::table::TableConstraint;
 use pqb::types::TableRef;
 use pqb::value::ArrayType;
+use pqb::value::ArrayValue;
 use pqb::value::DateTime;
 use pqb::value::Decimal;
 use pqb::value::NaiveDate;
@@ -113,6 +114,60 @@ fn value_checks() -> Select {
             Value::null_array(ArrayType::Int),
             "integer[]",
             "NULL::integer[]",
+        ),
+        (
+            ArrayValue::new(ArrayType::Int, [2, 2], [None, None, Some(3), Some(4)])
+                .unwrap()
+                .into(),
+            "integer[]",
+            "ARRAY[[NULL,NULL],[3,4]]::integer[]",
+        ),
+        (
+            ArrayValue::new(
+                ArrayType::Int,
+                [(2, 0), (2, -1)],
+                [Some(1), None, Some(3), Some(4)],
+            )
+            .unwrap()
+            .into(),
+            "integer[]",
+            "'[0:1][-1:0]={{1,NULL},{3,4}}'::integer[]",
+        ),
+        (
+            ArrayValue::new(
+                ArrayType::Text,
+                [2, 1, 2],
+                [Some("a,b"), Some(r"O'Reilly\world"), Some("NULL"), None],
+            )
+            .unwrap()
+            .into(),
+            "text[]",
+            r"ARRAY[[['a,b', E'O''Reilly\\world']], [['NULL', NULL]]]",
+        ),
+        (
+            ArrayValue::new(ArrayType::Bytes, [2, 1], [vec![0_u8, 1, 39, 255], vec![]])
+                .unwrap()
+                .into(),
+            "bytea[]",
+            "ARRAY[[decode('000127ff', 'hex')], [decode('', 'hex')]]",
+        ),
+        (
+            ArrayValue::new(
+                ArrayType::Json,
+                [1, 2],
+                [Some(serde_json::json!({"key": "a,b"})), None],
+            )
+            .unwrap()
+            .into(),
+            "jsonb[]",
+            "ARRAY[[jsonb_build_object('key', 'a,b'), NULL]]",
+        ),
+        (
+            ArrayValue::new(ArrayType::Int, [2, 0, 3], Vec::<i32>::new())
+                .unwrap()
+                .into(),
+            "integer[]",
+            "'{}'::integer[]",
         ),
         (Option::<i32>::None.into(), "integer", "NULL::integer"),
         (

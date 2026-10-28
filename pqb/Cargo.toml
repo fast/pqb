@@ -28,7 +28,12 @@ repository.workspace = true
 rust-version.workspace = true
 
 [features]
-postgres = ["dep:postgres-types", "dep:bytes", "rust_decimal?/db-postgres"]
+postgres = [
+  "dep:postgres-types",
+  "dep:postgres-protocol",
+  "dep:bytes",
+  "rust_decimal?/db-postgres",
+]
 sqlx = ["dep:sqlx"]
 with-chrono = ["dep:chrono", "postgres-types?/with-chrono-0_4", "sqlx?/chrono"]
 with-json = [
@@ -44,6 +49,7 @@ bytes = { version = "1", optional = true }
 chrono = { version = "0.4", default-features = false, features = [
   "std",
 ], optional = true }
+postgres-protocol = { version = "0.6", optional = true }
 postgres-types = { version = "0.2", optional = true }
 rust_decimal = { version = "1", default-features = false, features = [
   "std",

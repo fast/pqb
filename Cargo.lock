@@ -1311,6 +1311,7 @@ dependencies = [
  "futures-util",
  "insta",
  "pg_query",
+ "postgres-protocol",
  "postgres-types",
  "rust_decimal",
  "serde_json",

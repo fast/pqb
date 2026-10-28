@@ -73,7 +73,7 @@ jobs:
     runs-on: ubuntu-24.04
     strategy:
       matrix:
-        postgres: [ "14", "18" ]
+        postgres: [ "14", "15", "18" ]
     services:
       postgres:
         image: postgres:${{ matrix.postgres }}

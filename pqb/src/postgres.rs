@@ -51,6 +51,31 @@ impl ToSql for Value {
                 }
                 values.to_sql_checked(ty, out)
             }
+            Value::MultidimensionalArray(array) => {
+                let element = array.ty.postgres_type();
+                if !matches!(ty.kind(), Kind::Array(inner) if *inner == element) {
+                    return Err(format!("expected {}[], got {ty}", array.ty.sql_name()).into());
+                }
+                let dimensions = array.dimensions.iter().map(|dimension| {
+                    postgres_protocol::types::ArrayDimension {
+                        len: dimension.length as i32,
+                        lower_bound: dimension.lower_bound,
+                    }
+                });
+                postgres_protocol::types::array_to_sql(
+                    dimensions,
+                    element.oid(),
+                    &array.values,
+                    |value, buffer| {
+                        Ok(match value.to_sql_checked(&element, buffer)? {
+                            IsNull::Yes => postgres_protocol::IsNull::Yes,
+                            IsNull::No => postgres_protocol::IsNull::No,
+                        })
+                    },
+                    out,
+                )?;
+                Ok(IsNull::No)
+            }
             Value::Bool(v) => v.to_sql_checked(ty, out),
             Value::SmallInt(v) => v.to_sql_checked(ty, out),
             Value::Int(v) => v.to_sql_checked(ty, out),

@@ -35,10 +35,11 @@
 //! assert_eq!(query.values(), &["alice%".into()]);
 //! ```
 //!
-//! [`query`] contains SELECT, mutations, CTEs, set operations, windows and EXPLAIN. [`expr`]
+//! [`query`] contains SELECT, mutations (including MERGE), COPY, CTEs, set operations, windows
+//! and EXPLAIN. [`expr`]
 //! provides predicates, CASE and trusted SQL fragments; [`func`] provides function calls and
-//! aggregate modifiers. [`table`], [`index`] and [`schema`] build DDL with inline literals because
-//! PostgreSQL utility statements do not accept query parameters.
+//! aggregate modifiers. [`table`] includes partition management. DDL and COPY use inline literals
+//! because PostgreSQL utility statements do not accept query parameters.
 //!
 //! # Driver features
 //!
@@ -83,8 +84,9 @@
 //! literal type inference.
 //!
 //! [`value::Value::typed_array`] and [`value::Value::null_array`] preserve the element type of
-//! empty and NULL arrays. Both drivers support homogeneous one-dimensional arrays and reject
-//! integer overflow or incompatible element types. See the [README](https://github.com/fast/pqb#readme) for
+//! empty and NULL arrays. [`value::ArrayValue`] adds validated multidimensional arrays and explicit
+//! lower bounds. Both drivers bind these arrays and reject integer overflow or incompatible element
+//! types. See the [README](https://github.com/fast/pqb#readme) for
 //! composition examples, SQL type mappings and compatibility notes.
 #![cfg_attr(docsrs, feature(doc_cfg))]
 #![deny(missing_docs)]

@@ -35,6 +35,11 @@ pub use uuid::Uuid;
 
 use crate::writer::SqlWriter;
 
+mod array;
+pub use self::array::ArrayDimension;
+pub use self::array::ArrayError;
+pub use self::array::ArrayValue;
+
 /// SQL value variants.
 #[derive(Debug, Clone, PartialEq)]
 #[allow(missing_docs)]
@@ -54,6 +59,7 @@ pub enum Value {
     Bytes(Option<Vec<u8>>),
     Array(Option<Vec<Value>>),
     TypedArray(ArrayType, Option<Vec<Value>>),
+    MultidimensionalArray(ArrayValue),
     #[cfg(feature = "with-json")]
     Json(Option<Box<Json>>),
     #[cfg(feature = "with-uuid")]
@@ -102,6 +108,7 @@ impl Value {
             #[cfg(feature = "with-rust_decimal")]
             Self::Decimal(value) => value.is_none(),
             Self::TypedArray(_, value) => value.is_none(),
+            Self::MultidimensionalArray(_) => false,
         }
     }
 
@@ -296,6 +303,7 @@ pub(crate) fn write_value<W: SqlWriter>(w: &mut W, value: &Value) {
         Value::Double(Some(f)) => w.push_fmt(format_args!("{f}")),
         Value::String(Some(s)) => write_string_value(w, s.as_str()),
         Value::Array(Some(a)) => write_array_value(w, a.as_slice()),
+        Value::MultidimensionalArray(array) => array::write_array(w, array),
         Value::TypedArray(ty, values) => {
             if let Some(values) = values {
                 write_array_value(w, values);

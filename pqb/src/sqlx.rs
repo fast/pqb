@@ -17,6 +17,7 @@ use sqlx::SqlSafeStr;
 use sqlx::postgres::PgArguments;
 
 use crate::SqlWriterValues;
+use crate::value::ArrayDimension;
 use crate::value::ArrayType;
 use crate::value::Value;
 
@@ -52,13 +53,19 @@ fn bind(arguments: &mut PgArguments, value: Value) -> Result<(), Error> {
             let ty = values
                 .as_ref()
                 .and_then(|v| v.first())
-                .and_then(array_type)
+                .and_then(ArrayType::of_value)
                 .ok_or(
                     "cannot infer array element type; use Value::typed_array or Value::null_array",
                 )?;
-            bind_array(arguments, ty, values)
+            bind_array(arguments, ty, values, None)
         }
-        Value::TypedArray(ty, values) => bind_array(arguments, ty, values),
+        Value::TypedArray(ty, values) => bind_array(arguments, ty, values, None),
+        Value::MultidimensionalArray(array) => bind_array(
+            arguments,
+            array.ty,
+            Some(array.values),
+            Some(&array.dimensions),
+        ),
         Value::Bool(v) => arguments.add(v),
         Value::SmallInt(v) => arguments.add(v),
         Value::Int(v) => arguments.add(v),
@@ -84,38 +91,11 @@ fn bind(arguments: &mut PgArguments, value: Value) -> Result<(), Error> {
     }
 }
 
-fn array_type(value: &Value) -> Option<ArrayType> {
-    Some(match value {
-        Value::TinyInt(_) | Value::TinyUnsigned(_) | Value::SmallInt(_) => ArrayType::SmallInt,
-        Value::SmallUnsigned(_) | Value::Int(_) => ArrayType::Int,
-        Value::Unsigned(_) | Value::BigUnsigned(_) | Value::BigInt(_) => ArrayType::BigInt,
-        Value::Array(_) | Value::TypedArray(..) => return None,
-        Value::Bool(_) => ArrayType::Bool,
-        Value::Float(_) => ArrayType::Float,
-        Value::Double(_) => ArrayType::Double,
-        Value::String(_) => ArrayType::Text,
-        Value::Bytes(_) => ArrayType::Bytes,
-        #[cfg(feature = "with-json")]
-        Value::Json(_) => ArrayType::Json,
-        #[cfg(feature = "with-uuid")]
-        Value::Uuid(_) => ArrayType::Uuid,
-        #[cfg(feature = "with-chrono")]
-        Value::Date(_) => ArrayType::Date,
-        #[cfg(feature = "with-chrono")]
-        Value::Time(_) => ArrayType::Time,
-        #[cfg(feature = "with-chrono")]
-        Value::Timestamp(_) => ArrayType::Timestamp,
-        #[cfg(feature = "with-chrono")]
-        Value::TimestampWithTimeZone(_) => ArrayType::TimestampWithTimeZone,
-        #[cfg(feature = "with-rust_decimal")]
-        Value::Decimal(_) => ArrayType::Decimal,
-    })
-}
-
 fn bind_array(
     arguments: &mut PgArguments,
     ty: ArrayType,
     values: Option<Vec<Value>>,
+    dimensions: Option<&[ArrayDimension]>,
 ) -> Result<(), Error> {
     macro_rules! array {
         ($variant:ident, $type:ty) => {{
@@ -130,7 +110,7 @@ fn bind_array(
                         .collect::<Result<Vec<Option<$type>>, Error>>()
                 })
                 .transpose()?;
-            arguments.add(array)
+            add_array(arguments, array, dimensions)
         }};
     }
     match ty {
@@ -148,7 +128,7 @@ fn bind_array(
                         .collect::<Result<Vec<_>, Error>>()
                 })
                 .transpose()?;
-            arguments.add(array)
+            add_array(arguments, array, dimensions)
         }
         ArrayType::Int => {
             let array = values
@@ -163,7 +143,7 @@ fn bind_array(
                         .collect::<Result<Vec<_>, Error>>()
                 })
                 .transpose()?;
-            arguments.add(array)
+            add_array(arguments, array, dimensions)
         }
         ArrayType::BigInt => {
             let array = values
@@ -179,7 +159,7 @@ fn bind_array(
                         .collect::<Result<Vec<_>, Error>>()
                 })
                 .transpose()?;
-            arguments.add(array)
+            add_array(arguments, array, dimensions)
         }
         ArrayType::Bool => array!(Bool, bool),
         ArrayType::Float => array!(Float, f32),
@@ -213,7 +193,71 @@ fn bind_array(
                         .collect::<Result<Vec<_>, Error>>()
                 })
                 .transpose()?;
-            arguments.add(array)
+            add_array(arguments, array, dimensions)
         }
+    }
+}
+
+fn add_array<T>(
+    arguments: &mut PgArguments,
+    values: Option<Vec<Option<T>>>,
+    dimensions: Option<&[ArrayDimension]>,
+) -> Result<(), Error>
+where
+    T: for<'q> sqlx::Encode<'q, sqlx::Postgres>
+        + sqlx::Type<sqlx::Postgres>
+        + sqlx::postgres::PgHasArrayType
+        + 'static,
+{
+    if let Some(dimensions) = dimensions {
+        arguments.add(values.map(|values| MultidimensionalArray { dimensions, values }))
+    } else {
+        arguments.add(values)
+    }
+}
+
+struct MultidimensionalArray<'a, T> {
+    dimensions: &'a [ArrayDimension],
+    values: Vec<Option<T>>,
+}
+
+impl<T: sqlx::postgres::PgHasArrayType> sqlx::Type<sqlx::Postgres>
+    for MultidimensionalArray<'_, T>
+{
+    fn type_info() -> sqlx::postgres::PgTypeInfo {
+        T::array_type_info()
+    }
+}
+
+impl<'q, T> sqlx::Encode<'q, sqlx::Postgres> for MultidimensionalArray<'_, T>
+where
+    T: sqlx::Encode<'q, sqlx::Postgres> + sqlx::Type<sqlx::Postgres> + 'q,
+{
+    fn encode_by_ref(
+        &self,
+        buf: &mut sqlx::postgres::PgArgumentBuffer,
+    ) -> Result<sqlx::encode::IsNull, Error> {
+        let oid = T::type_info()
+            .oid()
+            .ok_or("array element type has no built-in OID")?;
+        buf.extend_from_slice(&(self.dimensions.len() as i32).to_be_bytes());
+        buf.extend_from_slice(&i32::from(self.values.iter().any(Option::is_none)).to_be_bytes());
+        buf.extend_from_slice(&oid.0.to_be_bytes());
+        for dimension in self.dimensions {
+            buf.extend_from_slice(&(dimension.length as i32).to_be_bytes());
+            buf.extend_from_slice(&dimension.lower_bound.to_be_bytes());
+        }
+        // SQLx's Vec encoder only supports one dimension. Keep its scalar encoders (and their
+        // deferred patches) in this argument buffer; only the array envelope is handled here.
+        for value in &self.values {
+            let offset = buf.len();
+            buf.extend_from_slice(&[0; 4]);
+            let length = match value.encode_by_ref(buf)? {
+                sqlx::encode::IsNull::Yes => -1_i32,
+                sqlx::encode::IsNull::No => i32::try_from(buf.len() - offset - 4)?,
+            };
+            buf[offset..offset + 4].copy_from_slice(&length.to_be_bytes());
+        }
+        Ok(sqlx::encode::IsNull::No)
     }
 }

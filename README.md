@@ -137,9 +137,24 @@ let empty = Value::typed_array(ArrayType::Int, Vec::<i32>::new());
 let absent = Value::null_array(ArrayType::Int);
 ```
 
-Adapters support homogeneous, one-dimensional arrays with nullable elements. `Value::array` remains available: postgres infers its type from the prepared statement; SQLx infers it from the first element and rejects untyped empty or NULL arrays. Mismatched element types return an encoding error.
+Adapters support homogeneous arrays with nullable elements, including multiple dimensions and nondefault lower bounds through `ArrayValue`. `Value::array` remains available: postgres infers its type from the prepared statement; SQLx infers it from the first element and rejects untyped empty or NULL arrays. Mismatched element types return an encoding error.
+
+For multiple dimensions, provide lengths and flat elements in row-major order (the last subscript varies fastest). Use `(length, lower_bound)` pairs when subscripts should start somewhere other than 1:
+
+```rust
+use pqb::query::Select;
+use pqb::value::{ArrayType, ArrayValue};
+
+let matrix = ArrayValue::new(ArrayType::Int, [2, 2], [Some(1), None, Some(3), Some(4)])?;
+let shifted = ArrayValue::new(ArrayType::Int, [(2, 0), (2, -1)], [1, 2, 3, 4])?;
+let query = Select::new().expr(matrix).expr(shifted).to_values();
+// Each array is one parameter, usable with postgres_params() or into_sqlx().
+```
+
+`ArrayValue::new` returns `ArrayError` for mismatched shape, incompatible elements, overflowing bounds or more than six dimensions. Zero-length axes become PostgreSQL's canonical empty array; use `Value::null_array` for a NULL array. Inline SQL preserves dimensions and lower bounds too. Result decoding remains the driver's responsibility: its default `Vec<T>` decoder does not handle multidimensional arrays; select individual elements, `unnest` the array or provide a custom decoder.
 
 ## Compose queries
+
 
 | Area | Supported builders |
 | --- | --- |
@@ -316,7 +331,7 @@ assert_eq!(Select::new().expr(expr).to_values().sql(), "SELECT COALESCE(\"name\"
 
 Builders reject basic structural mistakes such as missing mutation targets or inconsistent insert rows. `Insert::try_values` returns an error for dynamic row input; convenience setters and rendering may panic on programmer errors. This is not a complete SQL validator: schema-dependent names, expression types, grouping rules, supported function modifiers and version-specific syntax are checked by PostgreSQL. Expressions are dynamically typed, not a compile-time schema DSL.
 
-The test suite parses generated SQL with PostgreSQL's parser. CI also executes representative relational workflows and parameter roundtrips through both drivers on PostgreSQL 14 and 18. Version-specific features require their corresponding server: negative numeric scales and scales exceeding precision require PostgreSQL 15+, and virtual generated columns require PostgreSQL 18+.
+The test suite parses generated SQL with PostgreSQL's parser. CI also executes representative relational workflows and parameter roundtrips through both drivers on PostgreSQL 14, 15 and 18. MERGE is exercised on 15 and 18, with RETURNING and BY SOURCE on 18. Version-specific features require their corresponding server: negative numeric scales and scales exceeding precision require PostgreSQL 15+, and virtual generated columns require PostgreSQL 18+.
 
 PQB does not model every extension-specific SQL construct. Use explicit trusted SQL where the structured API does not cover a statement. PQB does not implement an ORM, migration runner, or connection management.
 
