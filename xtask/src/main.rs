@@ -26,6 +26,7 @@ struct Command {
 impl Command {
     fn run(self) {
         match self.sub {
+            SubCommand::Bench(cmd) => cmd.run(),
             SubCommand::Build(cmd) => cmd.run(),
             SubCommand::Check(cmd) => cmd.run(),
             SubCommand::Lint(cmd) => cmd.run(),
@@ -36,6 +37,8 @@ impl Command {
 
 #[derive(Subcommand)]
 enum SubCommand {
+    #[clap(about = "Benchmark query construction and rendering without a database.")]
+    Bench(CommandBench),
     #[clap(about = "Compile workspace packages.")]
     Build(CommandBuild),
     #[clap(about = "Check the library with each optional feature independently.")]
@@ -44,6 +47,39 @@ enum SubCommand {
     Lint(CommandLint),
     #[clap(about = "Run offline tests, or opt into real PostgreSQL workflows.")]
     Test(CommandTest),
+}
+
+#[derive(Parser)]
+struct CommandBench {
+    #[arg(long, help = "Compile benchmarks without running them.")]
+    no_run: bool,
+
+    #[arg(
+        last = true,
+        conflicts_with = "no_run",
+        help = "Arguments passed to Divan."
+    )]
+    args: Vec<String>,
+}
+
+impl CommandBench {
+    fn run(self) {
+        let mut cmd = find_command("cargo");
+        cmd.args([
+            "bench",
+            "--locked",
+            "--package",
+            "benchmarks",
+            "--bench",
+            "builder",
+        ]);
+        if self.no_run {
+            cmd.arg("--no-run");
+        } else if !self.args.is_empty() {
+            cmd.arg("--").args(self.args);
+        }
+        run_command(cmd);
+    }
 }
 
 #[derive(Parser)]

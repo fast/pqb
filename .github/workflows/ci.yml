@@ -49,6 +49,7 @@ jobs:
       - run: cargo x lint
       - run: cargo x check
       - run: cargo run --locked -p examples --example dynamic_query
+      - run: cargo x bench -- --test
 
   test:
     name: Run tests

@@ -371,7 +371,7 @@ DATABASE_URL=postgresql://postgres:postgres@localhost/postgres \
 
 ## Development
 
-`pqb/` contains the published library and offline SQL tests. `tests-integration/` contains real PostgreSQL workflows, grouped by queries, values, MERGE, COPY, and partitions. Database drivers and their runtimes are development dependencies of that separate package. Runnable applications live in the unpublished `examples/` package.
+`pqb/` contains the published library and offline SQL tests. `tests-integration/` contains real PostgreSQL workflows, grouped by queries, values, MERGE, COPY, and partitions. Runnable applications live in `examples/`, and performance workloads live in `benchmarks/`. These development packages are unpublished; their driver runtimes and benchmark dependencies do not become library dependencies.
 
 ```shell
 cargo x check
@@ -383,6 +383,17 @@ PQB_TEST_DATABASE_URL=postgresql://postgres:postgres@localhost/postgres \
 ```
 
 `cargo x test` tests the core in isolation before testing the workspace with all optional features. The database tests are explicitly ignored during ordinary offline test runs and required in CI. `cargo x check` checks each library feature independently, without workspace feature unification. See [AGENTS.md](AGENTS.md) for repository guidelines and [CHANGELOG.md](CHANGELOG.md) for user-visible changes.
+
+### Benchmarks
+
+```shell
+cargo x bench
+cargo x bench -- select::bound
+cargo x bench --no-run
+cargo x bench -- --test
+```
+
+Divan benchmarks measure construction of a joined SELECT, inline and parameterized rendering, and INSERT rendering at 1, 100, and 1,000 rows. Rendering cases build their query outside the measured region and include SQL allocation and parameter collection. They exclude driver encoding, network traffic, and PostgreSQL execution. Compare revisions on the same machine and toolchain; these workloads are a baseline, not a claim about overall database throughput. CI uses `--test` to smoke-test every case without timing thresholds.
 
 ## License and origins
 
