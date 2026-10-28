@@ -26,7 +26,9 @@ struct Command {
 impl Command {
     fn run(self) {
         match self.sub {
+            SubCommand::Bench(cmd) => cmd.run(),
             SubCommand::Build(cmd) => cmd.run(),
+            SubCommand::Check(cmd) => cmd.run(),
             SubCommand::Lint(cmd) => cmd.run(),
             SubCommand::Test(cmd) => cmd.run(),
         }
@@ -35,12 +37,49 @@ impl Command {
 
 #[derive(Subcommand)]
 enum SubCommand {
+    #[clap(about = "Benchmark query construction and rendering without a database.")]
+    Bench(CommandBench),
     #[clap(about = "Compile workspace packages.")]
     Build(CommandBuild),
+    #[clap(about = "Check the library with each optional feature independently.")]
+    Check(CommandCheck),
     #[clap(about = "Run format and clippy checks.")]
     Lint(CommandLint),
-    #[clap(about = "Run unit tests.")]
+    #[clap(about = "Run offline tests, or opt into real PostgreSQL workflows.")]
     Test(CommandTest),
+}
+
+#[derive(Parser)]
+struct CommandBench {
+    #[arg(long, help = "Compile benchmarks without running them.")]
+    no_run: bool,
+
+    #[arg(
+        last = true,
+        conflicts_with = "no_run",
+        help = "Arguments passed to Divan."
+    )]
+    args: Vec<String>,
+}
+
+impl CommandBench {
+    fn run(self) {
+        let mut cmd = find_command("cargo");
+        cmd.args([
+            "bench",
+            "--locked",
+            "--package",
+            "benchmarks",
+            "--bench",
+            "builder",
+        ]);
+        if self.no_run {
+            cmd.arg("--no-run");
+        } else if !self.args.is_empty() {
+            cmd.arg("--").args(self.args);
+        }
+        run_command(cmd);
+    }
 }
 
 #[derive(Parser)]
@@ -56,14 +95,71 @@ impl CommandBuild {
 }
 
 #[derive(Parser)]
+struct CommandCheck;
+
+impl CommandCheck {
+    fn run(self) {
+        // Keep this list in sync with pqb/Cargo.toml. Each invocation avoids workspace feature
+        // unification with integration tests and example applications.
+        for feature in [
+            None,
+            Some("with-chrono"),
+            Some("with-json"),
+            Some("with-rust_decimal"),
+            Some("with-uuid"),
+        ] {
+            let mut cmd = find_command("cargo");
+            cmd.args([
+                "check",
+                "--locked",
+                "--package",
+                "pqb",
+                "--lib",
+                "--no-default-features",
+            ]);
+            if let Some(feature) = feature {
+                cmd.args(["--features", feature]);
+            }
+            run_command(cmd);
+        }
+    }
+}
+
+#[derive(Parser)]
 struct CommandTest {
-    #[arg(long, help = "Run tests serially and do not capture output.")]
+    #[arg(long, help = "Do not capture test output.")]
     no_capture: bool,
+
+    #[arg(long, help = "Run database tests using PQB_TEST_DATABASE_URL.")]
+    postgres: bool,
 }
 
 impl CommandTest {
     fn run(self) {
-        run_command(make_test_cmd(self.no_capture, &[]));
+        if self.postgres {
+            assert!(
+                std::env::var_os("PQB_TEST_DATABASE_URL").is_some_and(|url| !url.is_empty()),
+                "set PQB_TEST_DATABASE_URL to a disposable PostgreSQL database"
+            );
+            let mut cmd = find_command("cargo");
+            cmd.args([
+                "test",
+                "--locked",
+                "--package",
+                "tests-integration",
+                "--test",
+                "postgres",
+                "--",
+                "--ignored",
+            ]);
+            if self.no_capture {
+                cmd.arg("--nocapture");
+            }
+            run_command(cmd);
+            return;
+        }
+        run_command(make_test_cmd(self.no_capture, false));
+        run_command(make_test_cmd(self.no_capture, true));
     }
 }
 
@@ -128,11 +224,13 @@ fn make_build_cmd(locked: bool) -> StdCommand {
     cmd
 }
 
-fn make_test_cmd(no_capture: bool, features: &[&str]) -> StdCommand {
+fn make_test_cmd(no_capture: bool, all_features: bool) -> StdCommand {
     let mut cmd = find_command("cargo");
-    cmd.args(["test", "--workspace", "--no-default-features"]);
-    if !features.is_empty() {
-        cmd.args(["--features", features.join(",").as_str()]);
+    cmd.args(["test", "--locked"]);
+    if all_features {
+        cmd.args(["--workspace", "--all-features"]);
+    } else {
+        cmd.args(["--package", "pqb", "--no-default-features"]);
     }
     if no_capture {
         cmd.args(["--", "--nocapture"]);

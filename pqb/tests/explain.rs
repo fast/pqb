@@ -28,7 +28,7 @@ fn explain_postgres_select_with_options() {
             .verbose(false)
             .costs(true)
             .settings(false)
-            .generic_plan(true)
+            .generic_plan(false)
             .buffers(true)
             .serialize_text()
             .wal(true)
@@ -39,7 +39,7 @@ fn explain_postgres_select_with_options() {
             .statement(Select::new().column("character").from("character"))
             .to_sql()
             .validate(),
-        @r#"EXPLAIN (ANALYZE, VERBOSE 0, COSTS, SETTINGS 0, GENERIC_PLAN, BUFFERS, SERIALIZE TEXT, WAL, TIMING 0, SUMMARY, MEMORY, FORMAT JSON) SELECT "character" FROM "character""#
+        @r#"EXPLAIN (ANALYZE, VERBOSE 0, COSTS, SETTINGS 0, GENERIC_PLAN 0, BUFFERS, SERIALIZE TEXT, WAL, TIMING 0, SUMMARY, MEMORY, FORMAT JSON) SELECT "character" FROM "character""#
     );
 }
 
@@ -47,11 +47,12 @@ fn explain_postgres_select_with_options() {
 fn explain_postgres_serialize_text() {
     assert_snapshot!(
         Explain::new()
+            .analyze()
             .serialize_text()
             .statement(Select::new().column("character").from("character"))
             .to_sql()
             .validate(),
-        @r#"EXPLAIN (SERIALIZE TEXT) SELECT "character" FROM "character""#
+        @r#"EXPLAIN (ANALYZE, SERIALIZE TEXT) SELECT "character" FROM "character""#
     );
 }
 
@@ -59,11 +60,12 @@ fn explain_postgres_serialize_text() {
 fn explain_postgres_serialize_binary() {
     assert_snapshot!(
         Explain::new()
+            .analyze()
             .serialize_binary()
             .statement(Select::new().column("character").from("character"))
             .to_sql()
             .validate(),
-        @r#"EXPLAIN (SERIALIZE BINARY) SELECT "character" FROM "character""#
+        @r#"EXPLAIN (ANALYZE, SERIALIZE BINARY) SELECT "character" FROM "character""#
     );
 }
 

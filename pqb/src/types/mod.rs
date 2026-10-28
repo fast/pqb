@@ -16,6 +16,8 @@
 
 use std::borrow::Cow;
 
+use crate::func::FunctionCall;
+use crate::func::write_function_call;
 use crate::query::Select;
 use crate::query::write_select;
 use crate::writer::SqlWriter;
@@ -88,9 +90,9 @@ const fn is_escaped_iden(string: &str) -> bool {
     true
 }
 
-impl From<&'static str> for Iden {
-    fn from(name: &'static str) -> Self {
-        Iden::new(name)
+impl From<&str> for Iden {
+    fn from(name: &str) -> Self {
+        Iden::new(name.to_owned())
     }
 }
 
@@ -135,9 +137,28 @@ pub enum TableRef {
     Table(TableName, Option<Iden>),
     /// Subquery with alias
     SubQuery(Box<Select>, Iden),
+    /// Correlated subquery with an alias.
+    LateralSubQuery(Box<Select>, Iden),
+    /// Table-valued function with an alias.
+    Function(FunctionCall, Iden),
 }
 
 impl TableRef {
+    /// Reference a derived table.
+    pub fn subquery(query: Select, alias: impl IntoIden) -> Self {
+        Self::SubQuery(Box::new(query), alias.into_iden())
+    }
+
+    /// Reference a correlated derived table with LATERAL.
+    pub fn lateral_subquery(query: Select, alias: impl IntoIden) -> Self {
+        Self::LateralSubQuery(Box::new(query), alias.into_iden())
+    }
+
+    /// Reference a table-valued function, such as UNNEST or GENERATE_SERIES.
+    pub fn function(call: FunctionCall, alias: impl IntoIden) -> Self {
+        Self::Function(call, alias.into_iden())
+    }
+
     /// Add or replace the current alias
     pub fn alias<A>(self, alias: A) -> Self
     where
@@ -146,6 +167,10 @@ impl TableRef {
         match self {
             Self::Table(table, _) => Self::Table(table, Some(alias.into_iden())),
             Self::SubQuery(statement, _) => Self::SubQuery(statement, alias.into_iden()),
+            Self::LateralSubQuery(statement, _) => {
+                Self::LateralSubQuery(statement, alias.into_iden())
+            }
+            Self::Function(call, _) => Self::Function(call, alias.into_iden()),
         }
     }
 }
@@ -257,6 +282,9 @@ pub struct ColumnName(pub Option<TableName>, pub Iden);
 pub enum JoinType {
     LeftJoin,
     InnerJoin,
+    RightJoin,
+    FullOuterJoin,
+    CrossJoin,
 }
 
 /// Drop behavior for DROP statements.
@@ -269,6 +297,10 @@ pub enum DropBehavior {
 }
 
 pub(crate) fn write_iden<W: SqlWriter>(w: &mut W, iden: &Iden) {
+    assert!(
+        !iden.name.is_empty() && !iden.name.contains('\0'),
+        "PostgreSQL identifiers must be nonempty and cannot contain NUL bytes"
+    );
     // PostgreSQL uses double quotes for quoting identifiers.
     // @see https://www.postgresql.org/docs/18/sql-syntax-lexical.html#SQL-SYNTAX-IDENTIFIERS
     const QUOTE: char = '"';
@@ -315,10 +347,18 @@ pub(crate) fn write_table_ref<W: SqlWriter>(w: &mut W, table_ref: &TableRef) {
                 write_iden(w, alias);
             }
         }
-        TableRef::SubQuery(query, alias) => {
+        TableRef::SubQuery(query, alias) | TableRef::LateralSubQuery(query, alias) => {
+            if matches!(table_ref, TableRef::LateralSubQuery(..)) {
+                w.push_str("LATERAL ");
+            }
             w.push_char('(');
             write_select(w, query);
             w.push_char(')');
+            w.push_str(" AS ");
+            write_iden(w, alias);
+        }
+        TableRef::Function(call, alias) => {
+            write_function_call(w, call);
             w.push_str(" AS ");
             write_iden(w, alias);
         }

@@ -32,9 +32,10 @@ use crate::writer::SqlWriterValues;
 /// Select rows from an existing table.
 #[derive(Default, Debug, Clone, PartialEq)]
 pub struct Select {
+    distinct: Option<Vec<Expr>>,
+    set: Option<Box<SetOperation>>,
     selects: Vec<SelectExpr>,
-    from: Vec<TableRef>,
-    joins: Vec<JoinExpr>,
+    from: Vec<FromItem>,
     conditions: Vec<Expr>,
     groups: Vec<Expr>,
     having: Vec<Expr>,
@@ -42,22 +43,124 @@ pub struct Select {
     limit: Option<u64>,
     offset: Option<u64>,
     lock: Option<RowLevelLock>,
-    table_sample: Option<TableSample>,
     with: Option<With>,
 }
 
+#[derive(Debug, Clone, PartialEq)]
+struct FromItem {
+    table: TableRef,
+    joins: Vec<JoinExpr>,
+    sample: Option<TableSample>,
+}
+
 /// Join expression.
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct JoinExpr {
     join_type: JoinType,
     table: TableRef,
-    on: Option<Expr>,
+    on: Option<JoinCondition>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+enum JoinCondition {
+    On(Expr),
+    Using(Vec<Iden>),
+}
+
+#[derive(Debug, Clone, PartialEq)]
+struct SetOperation {
+    left: Select,
+    op: SetOperator,
+    right: Select,
+}
+
+/// Set operations combining two SELECT results.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[expect(missing_docs)]
+pub enum SetOperator {
+    Union,
+    UnionAll,
+    Intersect,
+    IntersectAll,
+    Except,
+    ExceptAll,
 }
 
 impl Select {
     /// Create a new select statement.
     pub fn new() -> Self {
         Self::default()
+    }
+
+    /// Eliminate duplicate output rows.
+    pub fn distinct(mut self) -> Self {
+        self.distinct = Some(vec![]);
+        self
+    }
+
+    /// Keep the first row of each group of expressions (DISTINCT ON).
+    ///
+    /// Start ORDER BY with these expressions to choose which row is kept.
+    /// Bare literal values are rejected; use [`Expr::output_position`] for an output column number
+    /// or cast a value explicitly to use it as a constant expression.
+    pub fn distinct_on<I, E>(mut self, expressions: I) -> Self
+    where
+        I: IntoIterator<Item = E>,
+        E: Into<Expr>,
+    {
+        let expressions: Vec<_> = expressions.into_iter().map(Into::into).collect();
+        assert!(
+            !expressions.is_empty(),
+            "DISTINCT ON requires expressions; use distinct for all columns"
+        );
+        for expr in &expressions {
+            expr.validate_sort_group_expr();
+        }
+        self.distinct = Some(expressions);
+        self
+    }
+
+    /// Combine complete queries, preserving each operand's ordering and pagination.
+    ///
+    /// ORDER BY, LIMIT, OFFSET and WITH added afterwards apply to the combined result.
+    /// To filter or project that result, wrap it with [`Self::from_subquery`].
+    pub fn combine(self, op: SetOperator, right: Select) -> Self {
+        assert!(
+            self.lock.is_none() && right.lock.is_none(),
+            "set operation operands cannot have row locks"
+        );
+        if let (Some(left), Some(right)) = (self.columns_len(), right.columns_len()) {
+            assert_eq!(left, right, "set operation projection widths must match");
+        }
+        Self {
+            set: Some(Box::new(SetOperation {
+                left: self,
+                op,
+                right,
+            })),
+            ..Self::new()
+        }
+    }
+
+    /// Combine rows, eliminating duplicates.
+    pub fn union(self, right: Select) -> Self {
+        self.combine(SetOperator::Union, right)
+    }
+
+    /// Combine rows, retaining duplicates.
+    pub fn union_all(self, right: Select) -> Self {
+        self.combine(SetOperator::UnionAll, right)
+    }
+
+    /// Keep rows present in both queries, eliminating duplicates.
+    pub fn intersect(self, right: Select) -> Self {
+        self.combine(SetOperator::Intersect, right)
+    }
+
+    /// Remove rows present in the right query, eliminating duplicates.
+    pub fn except(self, right: Select) -> Self {
+        self.combine(SetOperator::Except, right)
     }
 
     /// Build the SQL string with placeholders and return collected values.
@@ -74,33 +177,34 @@ impl Select {
         sql
     }
 
-    /// From table.
+    /// Append a FROM item. Subsequent joins and TABLESAMPLE belong to this item.
     pub fn from<R>(mut self, table: R) -> Self
     where
         R: IntoTableRef,
     {
-        self.from.push(table.into());
+        self.from.push(FromItem {
+            table: table.into(),
+            joins: Vec::new(),
+            sample: None,
+        });
         self
     }
 
     /// From table with alias.
-    pub fn from_as<R, A>(mut self, table: R, alias: A) -> Self
+    pub fn from_as<R, A>(self, table: R, alias: A) -> Self
     where
         R: IntoTableRef,
         A: IntoIden,
     {
-        self.from.push(table.into().alias(alias.into_iden()));
-        self
+        self.from(table.into().alias(alias))
     }
 
     /// From sub-query.
-    pub fn from_subquery<T>(mut self, query: Select, alias: T) -> Self
+    pub fn from_subquery<T>(self, query: Select, alias: T) -> Self
     where
         T: IntoIden,
     {
-        self.from
-            .push(TableRef::SubQuery(query.into(), alias.into_iden()));
-        self
+        self.from(TableRef::subquery(query, alias))
     }
 
     /// Add an expression to the select expression list.
@@ -176,30 +280,91 @@ impl Select {
     }
 
     /// Left join with another table.
-    pub fn left_join<T, E>(mut self, table: T, on: E) -> Self
+    pub fn left_join<T, E>(self, table: T, on: E) -> Self
     where
         T: IntoTableRef,
         E: Into<Expr>,
     {
-        self.joins.push(JoinExpr {
-            join_type: JoinType::LeftJoin,
-            table: table.into(),
-            on: Some(on.into()),
-        });
-        self
+        self.join(JoinType::LeftJoin, table, on)
     }
 
     /// Inner join with another table.
-    pub fn inner_join<T, E>(mut self, table: T, on: E) -> Self
+    pub fn inner_join<T, E>(self, table: T, on: E) -> Self
     where
         T: IntoTableRef,
         E: Into<Expr>,
     {
-        self.joins.push(JoinExpr {
-            join_type: JoinType::InnerJoin,
+        self.join(JoinType::InnerJoin, table, on)
+    }
+
+    /// Join a table or subquery with an ON condition.
+    ///
+    /// # Panics
+    /// Panics for CROSS JOIN; use [`Self::cross_join`] instead.
+    pub fn join<T, E>(self, join_type: JoinType, table: T, on: E) -> Self
+    where
+        T: IntoTableRef,
+        E: Into<Expr>,
+    {
+        assert!(
+            join_type != JoinType::CrossJoin,
+            "use cross_join without an ON condition"
+        );
+        self.add_join(JoinExpr {
+            join_type,
             table: table.into(),
-            on: Some(on.into()),
-        });
+            on: Some(JoinCondition::On(on.into())),
+        })
+    }
+
+    /// Right outer join with an ON condition.
+    pub fn right_join<T: IntoTableRef, E: Into<Expr>>(self, table: T, on: E) -> Self {
+        self.join(JoinType::RightJoin, table, on)
+    }
+
+    /// Full outer join with an ON condition.
+    pub fn full_outer_join<T: IntoTableRef, E: Into<Expr>>(self, table: T, on: E) -> Self {
+        self.join(JoinType::FullOuterJoin, table, on)
+    }
+
+    /// Cartesian product with a table or subquery.
+    pub fn cross_join<T: IntoTableRef>(self, table: T) -> Self {
+        self.add_join(JoinExpr {
+            join_type: JoinType::CrossJoin,
+            table: table.into(),
+            on: None,
+        })
+    }
+
+    /// Join on equally named columns, emitting each join column once in SELECT *.
+    ///
+    /// # Panics
+    /// Panics for an empty column list or a CROSS JOIN.
+    pub fn join_using<T, I, C>(self, join_type: JoinType, table: T, columns: I) -> Self
+    where
+        T: IntoTableRef,
+        I: IntoIterator<Item = C>,
+        C: IntoIden,
+    {
+        let columns: Vec<_> = columns.into_iter().map(IntoIden::into_iden).collect();
+        assert!(!columns.is_empty(), "USING requires at least one column");
+        assert!(
+            join_type != JoinType::CrossJoin,
+            "CROSS JOIN cannot have USING"
+        );
+        self.add_join(JoinExpr {
+            join_type,
+            table: table.into(),
+            on: Some(JoinCondition::Using(columns)),
+        })
+    }
+
+    fn add_join(mut self, join: JoinExpr) -> Self {
+        self.from
+            .last_mut()
+            .expect("JOIN requires a preceding FROM item")
+            .joins
+            .push(join);
         self
     }
 
@@ -227,13 +392,18 @@ impl Select {
     }
 
     /// GROUP BY expressions.
+    ///
+    /// Bare literal values are rejected; use [`Expr::output_position`] for an output column number
+    /// or cast a value explicitly to use it as a constant expression.
     pub fn group_by_exprs<T, I>(mut self, exprs: I) -> Self
     where
         T: Into<Expr>,
         I: IntoIterator<Item = T>,
     {
         for expr in exprs {
-            self.groups.push(expr.into());
+            let expr = expr.into();
+            expr.validate_sort_group_expr();
+            self.groups.push(expr);
         }
         self
     }
@@ -249,12 +419,20 @@ impl Select {
 
     /// Offset number of returned rows.
     pub fn offset(mut self, offset: u64) -> Self {
+        assert!(
+            offset <= i64::MAX as u64,
+            "OFFSET must fit a PostgreSQL bigint"
+        );
         self.offset = Some(offset);
         self
     }
 
     /// Limit the number of returned rows.
     pub fn limit(mut self, limit: u64) -> Self {
+        assert!(
+            limit <= i64::MAX as u64,
+            "LIMIT must fit a PostgreSQL bigint"
+        );
         self.limit = Some(limit);
         self
     }
@@ -265,9 +443,17 @@ impl Select {
         self
     }
 
-    /// Apply TABLESAMPLE clause.
+    /// Sample the most recently added FROM table. Subsequent FROM items are unaffected.
     pub fn table_sample(mut self, table_sample: TableSample) -> Self {
-        self.table_sample = Some(table_sample);
+        let from = self
+            .from
+            .last_mut()
+            .expect("TABLESAMPLE requires a preceding FROM table");
+        assert!(
+            matches!(from.table, TableRef::Table(..)),
+            "TABLESAMPLE requires a table"
+        );
+        from.sample = Some(table_sample);
         self
     }
 
@@ -279,8 +465,22 @@ impl Select {
 }
 
 impl Select {
-    pub(crate) const fn columns_len(&self) -> usize {
-        self.selects.len()
+    pub(crate) fn columns_len(&self) -> Option<usize> {
+        if let Some(set) = &self.set {
+            return set.left.columns_len();
+        }
+        if self.selects.iter().any(|s| {
+            matches!(
+                s.expr,
+                Expr::Asterisk
+                    | Expr::Column(crate::types::ColumnRef::Asterisk(_))
+                    | Expr::Custom(_)
+                    | Expr::Fragment(_)
+            )
+        }) {
+            return None;
+        }
+        Some(self.selects.len())
     }
 }
 
@@ -289,6 +489,19 @@ impl Select {
 pub struct SelectExpr {
     expr: Expr,
     alias: Option<Iden>,
+}
+
+impl SelectExpr {
+    /// Construct a projection expression without an alias.
+    pub fn new(expr: impl Into<Expr>) -> Self {
+        expr.into().into()
+    }
+
+    /// Set the output column name.
+    pub fn alias(mut self, alias: impl IntoIden) -> Self {
+        self.alias = Some(alias.into_iden());
+        self
+    }
 }
 
 impl<T> From<T> for SelectExpr
@@ -418,12 +631,17 @@ impl TableSample {
     ///
     /// The percentage should be a value between 0.0 and 100.0.
     pub fn percentage(mut self, percentage: f64) -> Self {
+        assert!(
+            percentage.is_finite() && (0.0..=100.0).contains(&percentage),
+            "sampling percentage must be between 0 and 100"
+        );
         self.percentage = percentage;
         self
     }
 
     /// Set the repeatable seed value.
     pub fn repeatable(mut self, repeatable: f64) -> Self {
+        assert!(repeatable.is_finite(), "sampling seed must be finite");
         self.repeatable = Some(repeatable);
         self
     }
@@ -442,7 +660,53 @@ pub(crate) fn write_select<W: SqlWriter>(w: &mut W, select: &Select) {
         w.push_char(' ');
     }
 
+    if let Some(set) = &select.set {
+        assert!(
+            select.orders.iter().all(Order::valid_for_set),
+            "set operations order by output names or positions; wrap in from_subquery to order by expressions"
+        );
+        assert!(
+            select.selects.is_empty()
+                && select.from.is_empty()
+                && select.conditions.is_empty()
+                && select.groups.is_empty()
+                && select.having.is_empty()
+                && select.distinct.is_none()
+                && select.lock.is_none(),
+            "wrap a set operation in from_subquery before projecting, filtering or locking it"
+        );
+        w.push_char('(');
+        write_select(w, &set.left);
+        w.push_str(") ");
+        w.push_str(match set.op {
+            SetOperator::Union => "UNION",
+            SetOperator::UnionAll => "UNION ALL",
+            SetOperator::Intersect => "INTERSECT",
+            SetOperator::IntersectAll => "INTERSECT ALL",
+            SetOperator::Except => "EXCEPT",
+            SetOperator::ExceptAll => "EXCEPT ALL",
+        });
+        w.push_str(" (");
+        write_select(w, &set.right);
+        w.push_char(')');
+        write_select_tail(w, select);
+        return;
+    }
+
+    assert!(
+        select.lock.is_none()
+            || (select.distinct.is_none() && select.groups.is_empty() && select.having.is_empty()),
+        "row locks cannot be combined with DISTINCT, GROUP BY or HAVING"
+    );
     w.push_str("SELECT ");
+    if let Some(distinct) = &select.distinct {
+        w.push_str("DISTINCT ");
+        if !distinct.is_empty() {
+            w.push_str("ON ");
+            crate::expr::write_tuple(w, distinct);
+            w.push_char(' ');
+        }
+    }
 
     for (i, select_expr) in select.selects.iter().enumerate() {
         if i > 0 {
@@ -451,39 +715,51 @@ pub(crate) fn write_select<W: SqlWriter>(w: &mut W, select: &Select) {
         write_select_expr(w, select_expr);
     }
 
-    for (i, table_ref) in select.from.iter().enumerate() {
-        if i == 0 {
-            w.push_str(" FROM ");
-        } else {
-            w.push_str(", ");
-        }
-        write_table_ref(w, table_ref);
-    }
-
-    if let Some(table_sample) = &select.table_sample {
-        match table_sample.method {
-            SampleMethod::BERNOULLI => w.push_str(" TABLESAMPLE BERNOULLI"),
-            SampleMethod::SYSTEM => w.push_str(" TABLESAMPLE SYSTEM"),
-        }
-        w.push_str(" (");
-        w.push_fmt(format_args!("{}", table_sample.percentage));
-        w.push_str(")");
-        if let Some(repeatable) = table_sample.repeatable {
-            w.push_str(" REPEATABLE (");
-            w.push_fmt(format_args!("{repeatable}"));
+    for (i, item) in select.from.iter().enumerate() {
+        w.push_str(if i == 0 { " FROM " } else { ", " });
+        write_table_ref(w, &item.table);
+        if let Some(table_sample) = &item.sample {
+            match table_sample.method {
+                SampleMethod::BERNOULLI => w.push_str(" TABLESAMPLE BERNOULLI"),
+                SampleMethod::SYSTEM => w.push_str(" TABLESAMPLE SYSTEM"),
+            }
+            w.push_str(" (");
+            w.push_fmt(format_args!("{}", table_sample.percentage));
             w.push_str(")");
+            if let Some(repeatable) = table_sample.repeatable {
+                w.push_str(" REPEATABLE (");
+                w.push_fmt(format_args!("{repeatable}"));
+                w.push_str(")");
+            }
         }
-    }
 
-    for join in &select.joins {
-        match join.join_type {
-            JoinType::LeftJoin => w.push_str(" LEFT JOIN "),
-            JoinType::InnerJoin => w.push_str(" INNER JOIN "),
-        }
-        write_table_ref(w, &join.table);
-        if let Some(on) = &join.on {
-            w.push_str(" ON ");
-            write_expr(w, on);
+        for join in &item.joins {
+            match join.join_type {
+                JoinType::LeftJoin => w.push_str(" LEFT JOIN "),
+                JoinType::InnerJoin => w.push_str(" INNER JOIN "),
+                JoinType::RightJoin => w.push_str(" RIGHT JOIN "),
+                JoinType::FullOuterJoin => w.push_str(" FULL OUTER JOIN "),
+                JoinType::CrossJoin => w.push_str(" CROSS JOIN "),
+            }
+            write_table_ref(w, &join.table);
+            if let Some(on) = &join.on {
+                match on {
+                    JoinCondition::On(expr) => {
+                        w.push_str(" ON ");
+                        write_expr(w, expr);
+                    }
+                    JoinCondition::Using(columns) => {
+                        w.push_str(" USING (");
+                        for (i, column) in columns.iter().enumerate() {
+                            if i > 0 {
+                                w.push_str(", ");
+                            }
+                            write_iden(w, column);
+                        }
+                        w.push_char(')');
+                    }
+                }
+            }
         }
     }
 
@@ -507,6 +783,10 @@ pub(crate) fn write_select<W: SqlWriter>(w: &mut W, select: &Select) {
         write_expr(w, &having);
     }
 
+    write_select_tail(w, select);
+}
+
+fn write_select_tail<W: SqlWriter>(w: &mut W, select: &Select) {
     if !select.orders.is_empty() {
         w.push_str(" ORDER BY ");
         for (i, order) in select.orders.iter().enumerate() {
@@ -532,7 +812,7 @@ pub(crate) fn write_select<W: SqlWriter>(w: &mut W, select: &Select) {
     }
 }
 
-fn write_select_expr<W: SqlWriter>(w: &mut W, select_expr: &SelectExpr) {
+pub(crate) fn write_select_expr<W: SqlWriter>(w: &mut W, select_expr: &SelectExpr) {
     write_expr(w, &select_expr.expr);
     if let Some(alias) = &select_expr.alias {
         w.push_str(" AS ");

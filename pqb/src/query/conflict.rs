@@ -68,9 +68,9 @@ impl OnConflict {
     }
 
     /// Set ON CONSTRAINT target constraint name.
-    pub fn constraint(constraint: impl Into<String>) -> Self {
+    pub fn constraint(constraint: impl IntoIden) -> Self {
         OnConflict {
-            targets: OnConflictTarget::Constraint(constraint.into()),
+            targets: OnConflictTarget::Constraint(constraint.into_iden()),
             target_conditions: vec![],
             action: None,
             action_conditions: vec![],
@@ -187,7 +187,7 @@ impl OnConflict {
 #[derive(Debug, Clone, PartialEq)]
 enum OnConflictTarget {
     Exprs(Vec<Expr>),
-    Constraint(String),
+    Constraint(Iden),
 }
 
 /// Represents ON CONFLICT (upsert) actions
@@ -207,6 +207,26 @@ enum OnConflictUpdate {
 }
 
 pub(crate) fn write_on_conflict<W: SqlWriter>(w: &mut W, on_conflict: &OnConflict) {
+    match &on_conflict.action {
+        Some(OnConflictAction::DoNothing) => assert!(
+            on_conflict.action_conditions.is_empty(),
+            "DO NOTHING cannot have an action WHERE"
+        ),
+        Some(OnConflictAction::Update(updates)) => {
+            assert!(!updates.is_empty(), "DO UPDATE requires assignments");
+            assert!(
+                !matches!(&on_conflict.targets, OnConflictTarget::Exprs(exprs) if exprs.is_empty()),
+                "DO UPDATE requires a conflict target"
+            );
+        }
+        None => panic!("ON CONFLICT requires DO NOTHING or DO UPDATE"),
+    }
+    if !on_conflict.target_conditions.is_empty() {
+        assert!(
+            matches!(&on_conflict.targets, OnConflictTarget::Exprs(exprs) if !exprs.is_empty()),
+            "a conflict target WHERE requires index expressions"
+        );
+    }
     w.push_str(" ON CONFLICT");
     match &on_conflict.targets {
         OnConflictTarget::Exprs(exprs) => {
@@ -229,9 +249,7 @@ pub(crate) fn write_on_conflict<W: SqlWriter>(w: &mut W, on_conflict: &OnConflic
         }
         OnConflictTarget::Constraint(constraint) => {
             w.push_str(" ON CONSTRAINT ");
-            w.push_char('"');
-            w.push_str(constraint);
-            w.push_char('"');
+            write_iden(w, constraint);
         }
     }
     if let Some(condition) = Expr::from_conditions(on_conflict.target_conditions.clone()) {

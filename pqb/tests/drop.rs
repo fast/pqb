@@ -28,10 +28,10 @@ fn drop_index_sql() {
             .index(("public", "idx_users_email"))
             .if_exists()
             .concurrently()
-            .cascade()
+            .restrict()
             .to_sql()
             .validate(),
-        @r#"DROP INDEX CONCURRENTLY IF EXISTS "public"."idx_users_email" CASCADE"#
+        @r#"DROP INDEX CONCURRENTLY IF EXISTS "public"."idx_users_email" RESTRICT"#
     );
 }
 

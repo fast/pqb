@@ -47,6 +47,9 @@ jobs:
         with:
           tool: typos-cli,taplo-cli,hawkeye
       - run: cargo x lint
+      - run: cargo x check
+      - run: cargo run --locked -p examples --example dynamic_query
+      - run: cargo x bench -- --test
 
   test:
     name: Run tests
@@ -68,6 +71,35 @@ jobs:
         run: cargo x test --no-capture
         shell: bash
 
+  postgres:
+    name: PostgreSQL ${{ matrix.postgres }}
+    runs-on: ubuntu-24.04
+    strategy:
+      matrix:
+        postgres: [ "14", "15", "18" ]
+    services:
+      postgres:
+        image: postgres:${{ matrix.postgres }}
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      PQB_TEST_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/postgres
+    steps:
+      - uses: actions/checkout@v6
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Install PostgreSQL client
+        run: sudo apt-get update && sudo apt-get install --yes postgresql-client
+      - name: Execute generated SQL with psql
+        run: cargo x test --postgres
+
   required:
     name: Required
     runs-on: ubuntu-24.04
@@ -75,12 +107,14 @@ jobs:
     needs:
       - check
       - test
+      - postgres
     steps:
       - name: Guardian
         run: |
           if [[ ! ( \
                  "${{ needs.check.result }}" == "success" \
               && "${{ needs.test.result }}" == "success" \
+              && "${{ needs.postgres.result }}" == "success" \
               ) ]]; then
             echo "Required jobs haven't been completed successfully."
             exit -1

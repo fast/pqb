@@ -15,13 +15,20 @@
 use crate::SqlWriterValues;
 use crate::expr::write_expr;
 use crate::table::ColumnDef;
+use crate::table::ColumnValue;
+use crate::table::PartitionBound;
+use crate::table::TableConstraint;
 use crate::table::write_column_spec;
 use crate::table::write_column_type;
+use crate::table::write_constraint;
+use crate::table::write_partition_bound;
 use crate::types::Iden;
 use crate::types::IntoIden;
 use crate::types::IntoTableRef;
+use crate::types::TableName;
 use crate::types::TableRef;
 use crate::types::write_iden;
+use crate::types::write_table_name;
 use crate::types::write_table_ref;
 use crate::writer::SqlWriter;
 
@@ -38,11 +45,10 @@ impl AlterTable {
         Self::default()
     }
 
-    /// Build the SQL string with placeholders and return collected values.
+    /// Render DDL with inline literals and no parameters. PostgreSQL utility statements do not
+    /// accept bind parameters.
     pub fn to_values(&self) -> SqlWriterValues {
-        let mut w = SqlWriterValues::new();
-        write_alter_table(&mut w, self);
-        w
+        SqlWriterValues::from_sql(self.to_sql())
     }
 
     /// Convert the alter table statement to a PostgreSQL query string.
@@ -71,7 +77,86 @@ impl AlterTable {
         self
     }
 
-    /// Modify a column in an existing table
+    /// Add a column only if it is absent.
+    pub fn add_column_if_not_exists(mut self, column: ColumnDef) -> Self {
+        self.options
+            .push(TableAlterOption::AddColumn(AddColumnOption {
+                column,
+                if_not_exists: true,
+            }));
+        self
+    }
+
+    /// Drop a column only if it exists.
+    pub fn drop_column_if_exists(mut self, column: impl IntoIden) -> Self {
+        self.options
+            .push(TableAlterOption::DropColumn(DropColumnOption {
+                column: column.into_iden(),
+                if_exists: true,
+            }));
+        self
+    }
+
+    /// Add a table constraint.
+    pub fn add_constraint(mut self, constraint: impl Into<TableConstraint>) -> Self {
+        self.options
+            .push(TableAlterOption::AddConstraint(constraint.into()));
+        self
+    }
+
+    /// Drop a named constraint.
+    pub fn drop_constraint(mut self, name: impl IntoIden) -> Self {
+        self.options
+            .push(TableAlterOption::DropConstraint(name.into_iden()));
+        self
+    }
+
+    /// Remove a column's default value.
+    pub fn drop_default(mut self, column: impl IntoIden) -> Self {
+        self.options
+            .push(TableAlterOption::DropDefault(column.into_iden()));
+        self
+    }
+
+    /// Attach an existing table as a partition. Must be the only ALTER TABLE action.
+    pub fn attach_partition(mut self, table: impl Into<TableName>, bound: PartitionBound) -> Self {
+        self.options
+            .push(TableAlterOption::AttachPartition(table.into(), bound));
+        self
+    }
+
+    /// Detach a partition, leaving it as an independent table. Must be the only action.
+    pub fn detach_partition(mut self, table: impl Into<TableName>) -> Self {
+        self.options.push(TableAlterOption::DetachPartition(
+            table.into(),
+            DetachMode::Normal,
+        ));
+        self
+    }
+
+    /// Detach with a reduced parent lock (PostgreSQL 14+), outside a transaction block.
+    /// PostgreSQL rejects this when the parent has a default partition.
+    pub fn detach_partition_concurrently(mut self, table: impl Into<TableName>) -> Self {
+        self.options.push(TableAlterOption::DetachPartition(
+            table.into(),
+            DetachMode::Concurrently,
+        ));
+        self
+    }
+
+    /// Complete a previously interrupted concurrent detach (PostgreSQL 14+).
+    pub fn finalize_detach_partition(mut self, table: impl Into<TableName>) -> Self {
+        self.options.push(TableAlterOption::DetachPartition(
+            table.into(),
+            DetachMode::Finalize,
+        ));
+        self
+    }
+
+    /// Modify a column's type, nullability, default or key constraints.
+    ///
+    /// Panics when rendering an empty change or a generated or identity definition; use ADD COLUMN
+    /// for generated and identity columns.
     pub fn modify_column(mut self, column: ColumnDef) -> Self {
         self.options.push(TableAlterOption::ModifyColumn(column));
         self
@@ -107,10 +192,22 @@ impl AlterTable {
 #[derive(Debug, Clone)]
 #[allow(clippy::enum_variant_names)] // add_foreign_key, drop_foreign_key, ...
 enum TableAlterOption {
+    AttachPartition(TableName, PartitionBound),
+    DetachPartition(TableName, DetachMode),
+    AddConstraint(TableConstraint),
+    DropConstraint(Iden),
+    DropDefault(Iden),
     AddColumn(AddColumnOption),
     ModifyColumn(ColumnDef),
     RenameColumn(Iden, Iden),
     DropColumn(DropColumnOption),
+}
+
+#[derive(Debug, Clone, Copy)]
+enum DetachMode {
+    Normal,
+    Concurrently,
+    Finalize,
 }
 
 #[derive(Debug, Clone)]
@@ -126,6 +223,21 @@ struct DropColumnOption {
 }
 
 fn write_alter_table<W: SqlWriter>(w: &mut W, alter: &AlterTable) {
+    assert!(
+        matches!(&alter.table, Some(TableRef::Table(_, None))),
+        "ALTER TABLE requires an unaliased table name"
+    );
+    assert!(!alter.options.is_empty(), "ALTER TABLE requires an action");
+    assert!(
+        alter.options.len() == 1
+            || !alter.options.iter().any(|o| matches!(
+                o,
+                TableAlterOption::RenameColumn(..)
+                    | TableAlterOption::AttachPartition(..)
+                    | TableAlterOption::DetachPartition(..)
+            )),
+        "RENAME COLUMN and partition actions must be separate ALTER TABLE statements"
+    );
     w.push_str("ALTER TABLE ");
     if let Some(table) = &alter.table {
         write_table_ref(w, table);
@@ -136,10 +248,39 @@ fn write_alter_table<W: SqlWriter>(w: &mut W, alter: &AlterTable) {
             w.push_str(", ");
         }
         match option {
+            TableAlterOption::AttachPartition(table, bound) => {
+                w.push_str("ATTACH PARTITION ");
+                write_table_name(w, table);
+                w.push_char(' ');
+                write_partition_bound(w, bound);
+            }
+            TableAlterOption::DetachPartition(table, mode) => {
+                w.push_str("DETACH PARTITION ");
+                write_table_name(w, table);
+                w.push_str(match mode {
+                    DetachMode::Normal => "",
+                    DetachMode::Concurrently => " CONCURRENTLY",
+                    DetachMode::Finalize => " FINALIZE",
+                });
+            }
+            TableAlterOption::AddConstraint(constraint) => {
+                w.push_str("ADD ");
+                write_constraint(w, constraint);
+            }
+            TableAlterOption::DropConstraint(name) => {
+                w.push_str("DROP CONSTRAINT ");
+                write_iden(w, name);
+            }
+            TableAlterOption::DropDefault(column) => {
+                w.push_str("ALTER COLUMN ");
+                write_iden(w, column);
+                w.push_str(" DROP DEFAULT");
+            }
             TableAlterOption::AddColumn(AddColumnOption {
                 column,
                 if_not_exists,
             }) => {
+                assert!(column.ty.is_some(), "ADD COLUMN requires a column type");
                 w.push_str("ADD COLUMN ");
                 if *if_not_exists {
                     w.push_str("IF NOT EXISTS ");
@@ -152,6 +293,13 @@ fn write_alter_table<W: SqlWriter>(w: &mut W, alter: &AlterTable) {
                 write_column_spec(w, &column.spec);
             }
             TableAlterOption::ModifyColumn(column_def) => {
+                assert!(
+                    !matches!(
+                        column_def.spec.value,
+                        Some(ColumnValue::Generated(_) | ColumnValue::Identity(_))
+                    ),
+                    "modify_column does not change generated or identity definitions"
+                );
                 let mut is_first = true;
 
                 macro_rules! write_comma_if_not_first {
@@ -183,7 +331,7 @@ fn write_alter_table<W: SqlWriter>(w: &mut W, alter: &AlterTable) {
                     }
                 }
 
-                if let Some(default) = &column_def.spec.default {
+                if let Some(ColumnValue::Default(default)) = &column_def.spec.value {
                     write_comma_if_not_first!();
                     w.push_str("ALTER COLUMN ");
                     write_iden(w, &column_def.name);
@@ -205,7 +353,7 @@ fn write_alter_table<W: SqlWriter>(w: &mut W, alter: &AlterTable) {
                     w.push_str(")");
                 }
 
-                let _ = is_first;
+                assert!(!is_first, "modify_column requires a change");
             }
             TableAlterOption::RenameColumn(from, to) => {
                 w.push_str("RENAME COLUMN ");

@@ -14,6 +14,8 @@
 
 //! Schema definition statements.
 
+mod create;
 mod drop;
 
+pub use self::create::*;
 pub use self::drop::*;

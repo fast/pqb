@@ -18,6 +18,8 @@ use crate::SqlWriterValues;
 use crate::expr::Expr;
 use crate::expr::write_expr;
 use crate::expr::write_tuple;
+use crate::types::ColumnName;
+use crate::types::ColumnRef;
 use crate::types::Iden;
 use crate::types::IntoIden;
 use crate::types::TableRef;
@@ -47,11 +49,10 @@ impl CreateIndex {
         Self::default()
     }
 
-    /// Build the SQL string with placeholders and return collected values.
+    /// Render DDL with inline literals and no parameters. PostgreSQL utility statements do not
+    /// accept bind parameters.
     pub fn to_values(&self) -> SqlWriterValues {
-        let mut w = SqlWriterValues::new();
-        write_create_index(&mut w, self);
-        w
+        SqlWriterValues::from_sql(self.to_sql())
     }
 
     /// Convert the CREATE INDEX statement to a PostgreSQL query string.
@@ -117,7 +118,9 @@ impl CreateIndex {
         self
     }
 
-    /// Set index as primary
+    /// Use this definition as a primary key inside CREATE TABLE.
+    ///
+    /// Rendering this definition as a standalone index panics: primary keys are table constraints.
     pub fn primary(mut self) -> Self {
         self.primary = true;
         self
@@ -210,23 +213,20 @@ pub enum IndexMethod {
     Gist,
     /// BRIN index method.
     Brin,
-    /// Custom index method.
+    /// Custom index method, quoted as an identifier.
     Custom(Cow<'static, str>),
 }
 
 impl IndexMethod {
-    /// Create a custom index method.
-    pub fn custom<T>(method: T) -> Self
-    where
-        T: Into<Cow<'static, str>>,
-    {
-        Self::Custom(method.into())
+    /// Create a custom index method, quoted as an identifier.
+    pub fn custom(method: impl Into<String>) -> Self {
+        Self::Custom(Cow::Owned(method.into()))
     }
 }
 
-impl From<&'static str> for IndexMethod {
-    fn from(value: &'static str) -> Self {
-        IndexMethod::Custom(Cow::Borrowed(value))
+impl From<&str> for IndexMethod {
+    fn from(value: &str) -> Self {
+        IndexMethod::Custom(Cow::Owned(value.to_owned()))
     }
 }
 
@@ -268,13 +268,27 @@ where
 }
 
 fn write_create_index<W: SqlWriter>(w: &mut W, index: &CreateIndex) {
-    w.push_str("CREATE INDEX ");
-    if index.primary {
-        w.push_str("PRIMARY KEY ");
-    }
+    assert!(
+        matches!(&index.table, Some(TableRef::Table(_, None))),
+        "CREATE INDEX requires an unaliased table name"
+    );
+    assert!(
+        !index.columns.is_empty(),
+        "CREATE INDEX requires columns or expressions"
+    );
+    assert!(
+        !index.if_not_exists || index.name.is_some(),
+        "IF NOT EXISTS requires an index name"
+    );
+    assert!(
+        !index.primary,
+        "primary keys must be created as table constraints"
+    );
+    w.push_str("CREATE ");
     if index.unique {
         w.push_str("UNIQUE ");
     }
+    w.push_str("INDEX ");
     if index.concurrently {
         w.push_str("CONCURRENTLY ");
     }
@@ -304,10 +318,30 @@ fn write_create_index<W: SqlWriter>(w: &mut W, index: &CreateIndex) {
 
 /// Write table index definition inside CREATE TABLE statement.
 pub(crate) fn write_table_index<W: SqlWriter>(w: &mut W, index: &CreateIndex) {
+    assert!(
+        !index.columns.is_empty()
+            && index.columns.iter().all(|column| matches!(
+                column,
+                Expr::Column(ColumnRef::Column(ColumnName(None, _)))
+            )),
+        "table key constraints require unqualified column names"
+    );
+    assert!(
+        index.table.is_none()
+            && index.method.is_none()
+            && index.predicate.is_none()
+            && !index.concurrently
+            && !index.if_not_exists,
+        "table key constraints do not support standalone index options"
+    );
+    if let Some(name) = &index.name {
+        w.push_str("CONSTRAINT ");
+        write_iden(w, name);
+        w.push_char(' ');
+    }
     if index.primary {
         w.push_str("PRIMARY KEY ");
-    }
-    if index.unique {
+    } else if index.unique {
         w.push_str("UNIQUE ");
     }
     write_index_columns(w, &index.columns);
@@ -322,13 +356,10 @@ fn write_index_columns<W: SqlWriter>(w: &mut W, columns: &[Expr]) {
             w.push_str(", ");
         }
         match col {
-            // Wrap opclass expressions in parentheses for disambiguation
-            Expr::Binary(_, _, _) | Expr::Unary(_, _) => {
-                write_tuple(w, std::slice::from_ref(col));
-            }
-            _ => {
+            Expr::Column(_) | Expr::FunctionCall(_) | Expr::Custom(_) => {
                 write_expr(w, col);
             }
+            _ => write_tuple(w, std::slice::from_ref(col)),
         }
     }
     w.push_str(")");
@@ -355,7 +386,7 @@ fn write_index_method<W: SqlWriter>(w: &mut W, method: &IndexMethod) {
         IndexMethod::Hash => w.push_str("hash"),
         IndexMethod::Gist => w.push_str("gist"),
         IndexMethod::Brin => w.push_str("brin"),
-        IndexMethod::Custom(name) => w.push_str(name),
+        IndexMethod::Custom(name) => write_iden(w, &name.as_ref().into_iden()),
     }
 }
 

@@ -109,3 +109,136 @@ fn select_is_null() {
         @r#"SELECT * FROM "t" WHERE "c1" + 1 IS NOT NULL"#
     );
 }
+
+#[test]
+fn dynamic_filters_case_and_json_keep_values_bound() {
+    use pqb::expr::Case;
+    use pqb::expr::SqlFragment;
+    let label = Case::new(Expr::column("score").gte(80), "high").otherwise("low");
+    let query = Select::new()
+        .expr_as(label, "label")
+        .expr(
+            SqlFragment::new("COALESCE(")
+                .expr(Expr::column("name"))
+                .sql(", ")
+                .expr("O'Reilly $1")
+                .sql(")"),
+        )
+        .from("users")
+        .and_where(Expr::all([
+            Expr::column("profile").json_get_text("city").eq("上海"),
+            Expr::any([
+                Expr::column("name").ilike("alice%"),
+                Expr::column("name").is_null(),
+            ]),
+        ]));
+    query.to_sql().validate();
+    let (sql, values) = query.to_values().into_parts();
+    assert_eq!(
+        sql.validate(),
+        "SELECT CASE WHEN \"score\" >= $1 THEN $2 ELSE $3 END AS \"label\", COALESCE(\"name\", $4) FROM \"users\" WHERE (\"profile\" ->> $5) = $6 AND (\"name\" ILIKE $7 OR \"name\" IS NULL)"
+    );
+    assert_eq!(
+        values,
+        vec![
+            80.into(),
+            "high".into(),
+            "low".into(),
+            "O'Reilly $1".into(),
+            "city".into(),
+            "上海".into(),
+            "alice%".into()
+        ]
+    );
+
+    let (sql, values) = Select::new()
+        .expr(Expr::all(Vec::<Expr>::new()))
+        .expr(Expr::any(Vec::<Expr>::new()))
+        .to_values()
+        .into_parts();
+    assert_eq!(sql.validate(), "SELECT TRUE, FALSE");
+    assert!(values.is_empty());
+}
+
+#[test]
+fn aggregates_and_window_frames() {
+    use pqb::func::FunctionCall;
+    use pqb::query::FrameBound;
+    use pqb::query::Order;
+    use pqb::query::Window;
+    use pqb::query::WindowFrame;
+    let total = FunctionCall::sum(Expr::column("amount"))
+        .filter(Expr::column("status").eq("paid"))
+        .over(
+            Window::new()
+                .partition_by([Expr::column("account_id")])
+                .order_by([Order::column("id")])
+                .frame(WindowFrame::rows(
+                    FrameBound::UnboundedPreceding,
+                    FrameBound::CurrentRow,
+                )),
+        );
+    let query = Select::new()
+        .expr_as(total, "running_total")
+        .from("payments");
+    query.to_sql().validate();
+    let (sql, values) = query.to_values().into_parts();
+    assert_eq!(
+        sql.validate(),
+        "SELECT SUM(\"amount\") FILTER (WHERE \"status\" = $1) OVER (PARTITION BY \"account_id\" ORDER BY \"id\" ASC ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) AS \"running_total\" FROM \"payments\""
+    );
+    assert_eq!(values, vec!["paid".into()]);
+
+    Select::new()
+        .expr(FunctionCall::count(Expr::column("account_id")).distinct())
+        .expr(
+            FunctionCall::custom("array_agg", [Expr::column("amount")])
+                .order_by([Order::column("id").desc()]),
+        )
+        .from("payments")
+        .to_sql()
+        .validate();
+}
+
+#[test]
+fn between_groups_compound_bounds() {
+    let query = Select::new().expr(Expr::value(true).between(Expr::value(false).or(true), true));
+    assert_eq!(
+        query.to_sql().validate(),
+        "SELECT TRUE BETWEEN (FALSE OR TRUE) AND TRUE"
+    );
+}
+
+#[test]
+fn function_and_window_modifiers_reject_unsupported_combinations() {
+    use pqb::func::FunctionCall;
+    use pqb::query::FrameBound;
+    use pqb::query::FrameUnits;
+    use pqb::query::Order;
+    use pqb::query::Window;
+    use pqb::query::WindowFrame;
+    let invalid = [
+        FunctionCall::count_all().distinct(),
+        FunctionCall::count(Expr::column("id"))
+            .distinct()
+            .over(Window::new()),
+        FunctionCall::sum(Expr::column("id"))
+            .order_by([Order::column("id")])
+            .over(Window::new()),
+        FunctionCall::lower("text").filter(true),
+        FunctionCall::row_number(),
+        FunctionCall::sum(1).over(Window::new().frame(WindowFrame::new(
+            FrameUnits::Groups,
+            FrameBound::Preceding(1),
+            FrameBound::CurrentRow,
+        ))),
+        FunctionCall::sum(1).over(Window::new().frame(WindowFrame::new(
+            FrameUnits::Range,
+            FrameBound::Preceding(1),
+            FrameBound::CurrentRow,
+        ))),
+    ];
+    for call in invalid {
+        assert!(std::panic::catch_unwind(|| Select::new().expr(call).to_sql()).is_err());
+    }
+}

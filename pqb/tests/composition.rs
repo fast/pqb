@@ -1,0 +1,209 @@
+// Copyright 2025 FastLabs Developers
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+mod common;
+
+use common::ValidateSql;
+use pqb::expr::Expr;
+use pqb::query::CommonTableExpression;
+use pqb::query::Delete;
+use pqb::query::Order;
+use pqb::query::Returning;
+use pqb::query::Select;
+use pqb::query::With;
+use pqb::types::JoinType;
+use pqb::types::TableRef;
+
+#[test]
+fn recursive_cte_preserves_parameter_order() {
+    let sequence = Select::new().expr(1).union_all(
+        Select::new()
+            .expr(Expr::column("n").add(1))
+            .from("sequence")
+            .and_where(Expr::column("n").lt(5)),
+    );
+    let query = Select::new().column("n").from("sequence").with(
+        With::new().recursive().cte(
+            CommonTableExpression::new("sequence")
+                .column("n")
+                .select(sequence),
+        ),
+    );
+    query.to_sql().validate();
+    let (sql, values) = query.to_values().into_parts();
+    assert_eq!(
+        sql.validate(),
+        "WITH RECURSIVE \"sequence\" (\"n\") AS ((SELECT $1) UNION ALL (SELECT \"n\" + $2 FROM \"sequence\" WHERE \"n\" < $3)) SELECT \"n\" FROM \"sequence\""
+    );
+    assert_eq!(values, vec![1.into(), 1.into(), 5.into()]);
+}
+
+#[test]
+fn set_operations_keep_operand_and_result_limits_separate() {
+    let query = Select::new()
+        .expr(1)
+        .limit(1)
+        .union(Select::new().expr(2))
+        .intersect(Select::new().expr(2).union_all(Select::new().expr(3)))
+        .limit(2);
+    assert_eq!(
+        query.to_sql().validate(),
+        "((SELECT 1 LIMIT 1) UNION (SELECT 2)) INTERSECT ((SELECT 2) UNION ALL (SELECT 3)) LIMIT 2"
+    );
+    let (sql, values) = query.to_values().into_parts();
+    sql.validate();
+    assert_eq!(values, vec![1.into(), 2.into(), 2.into(), 3.into()]);
+}
+
+#[test]
+fn latest_row_with_lateral_and_using_join() {
+    let latest = Select::new()
+        .column("body")
+        .from("messages")
+        .and_where(Expr::column("user_id").eq(Expr::column(("users", "id"))))
+        .limit(1);
+    let query = Select::new()
+        .distinct_on([Expr::column(("users", "id"))])
+        .column(("users", "id"))
+        .column(("latest", "body"))
+        .from("users")
+        .left_join(TableRef::lateral_subquery(latest, "latest"), true)
+        .join_using(JoinType::FullOuterJoin, "profiles", ["id"])
+        .order_by([Order::column(("users", "id"))]);
+    query.to_sql().validate();
+    let (sql, values) = query.to_values().into_parts();
+    assert!(sql.clone().validate().contains("LEFT JOIN LATERAL (SELECT"));
+    assert!(sql.contains("FULL OUTER JOIN \"profiles\" USING (\"id\")"));
+    assert_eq!(values, vec![true.into()]);
+}
+
+#[test]
+fn data_modifying_cte_returns_deleted_rows() {
+    let deleted = Delete::new()
+        .from_table("events")
+        .and_where(Expr::column("expired").eq(true))
+        .returning(Returning::all());
+    let query = Select::new()
+        .column("id")
+        .from("deleted")
+        .with(With::new().cte(CommonTableExpression::new("deleted").query(deleted)));
+    query.to_sql().validate();
+    let (sql, values) = query.to_values().into_parts();
+    assert_eq!(
+        sql.validate(),
+        "WITH \"deleted\" AS (DELETE FROM \"events\" WHERE \"expired\" = $1 RETURNING *) SELECT \"id\" FROM \"deleted\""
+    );
+    assert_eq!(values, vec![true.into()]);
+}
+
+#[test]
+fn joined_mutations_and_aliased_returning() {
+    use pqb::query::Update;
+    let update = Update::new()
+        .table("accounts")
+        .value("balance", Expr::column(("changes", "balance")))
+        .from("changes")
+        .and_where(Expr::column(("accounts", "id")).eq(Expr::column(("changes", "id"))))
+        .and_where(Expr::column(("changes", "version")).eq(3))
+        .returning(Returning::expr_as(
+            Expr::column(("accounts", "id")),
+            "account_id",
+        ));
+    update.to_sql().validate();
+    let (sql, values) = update.to_values().into_parts();
+    assert_eq!(
+        sql.validate(),
+        "UPDATE \"accounts\" SET \"balance\" = \"changes\".\"balance\" FROM \"changes\" WHERE \"accounts\".\"id\" = \"changes\".\"id\" AND \"changes\".\"version\" = $1 RETURNING \"accounts\".\"id\" AS \"account_id\""
+    );
+    assert_eq!(values, vec![3.into()]);
+
+    let delete = Delete::new()
+        .from_table("accounts")
+        .using("changes")
+        .and_where(Expr::column(("accounts", "id")).eq(Expr::column(("changes", "id"))))
+        .and_where(Expr::column(("changes", "deleted")).eq(true))
+        .returning(Returning::column(("accounts", "id")));
+    delete.to_sql().validate();
+    let (sql, values) = delete.to_values().into_parts();
+    assert!(sql.validate().contains(" USING \"changes\" WHERE "));
+    assert_eq!(values, vec![true.into()]);
+}
+
+#[test]
+fn grouping_requires_explicit_literal_intent() {
+    for expr in [Expr::value(1), Expr::value("name"), Expr::null()] {
+        assert!(std::panic::catch_unwind(|| Order::expr(expr.clone())).is_err());
+        assert!(std::panic::catch_unwind(|| Select::new().group_by_exprs([expr.clone()])).is_err());
+        assert!(std::panic::catch_unwind(|| Select::new().distinct_on([expr.clone()])).is_err());
+    }
+    let query = Select::new()
+        .expr(7)
+        .group_by_exprs([Expr::value(1).cast_as("integer")])
+        .order_by([Order::position(1)]);
+    query.to_sql().validate();
+    let bound = query.to_values();
+    assert_eq!(
+        bound.sql(),
+        "SELECT $1 GROUP BY CAST($2 AS integer) ORDER BY 1 ASC"
+    );
+    assert_eq!(bound.values(), &[7.into(), 1.into()]);
+}
+
+#[test]
+fn composed_queries_reject_incompatible_shapes_and_clauses() {
+    use pqb::query::Copy;
+    use pqb::query::Explain;
+    use pqb::query::Insert;
+    use pqb::query::RowLevelLock;
+    assert!(
+        std::panic::catch_unwind(|| Select::new().expr(1).union(Select::new().exprs([1, 2])))
+            .is_err()
+    );
+    assert!(
+        std::panic::catch_unwind(|| Select::new()
+            .expr_as(1, "n")
+            .union_all(Select::new().expr(2))
+            .order_by([Order::expr(Expr::column("n").add(1))])
+            .to_sql())
+        .is_err()
+    );
+    assert!(
+        std::panic::catch_unwind(|| Select::new()
+            .column("id")
+            .from("items")
+            .distinct()
+            .lock(RowLevelLock::for_update())
+            .to_sql())
+        .is_err()
+    );
+    assert!(
+        std::panic::catch_unwind(|| Insert::new()
+            .into_table("items")
+            .select_from(Select::new().expr(1))
+            .columns(["id", "name"])
+            .to_sql())
+        .is_err()
+    );
+    assert!(
+        std::panic::catch_unwind(|| Copy::from_query(Delete::new().from_table("items"))).is_err()
+    );
+    assert!(
+        std::panic::catch_unwind(|| Explain::new()
+            .analyze()
+            .generic_plan(true)
+            .statement(Select::new().expr(1))
+            .to_sql())
+        .is_err()
+    );
+}

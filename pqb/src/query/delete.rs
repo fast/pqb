@@ -28,8 +28,9 @@ use crate::writer::SqlWriter;
 #[derive(Default, Debug, Clone, PartialEq)]
 pub struct Delete {
     table: Option<TableRef>,
+    using: Vec<TableRef>,
     conditions: Vec<Expr>,
-    returning: Option<Returning>,
+    pub(super) returning: Option<Returning>,
     with: Option<With>,
 }
 
@@ -62,6 +63,12 @@ impl Delete {
         self
     }
 
+    /// Add a table or subquery to DELETE ... USING.
+    pub fn using<T: IntoTableRef>(mut self, table: T) -> Self {
+        self.using.push(table.into());
+        self
+    }
+
     /// And where condition.
     pub fn and_where<T>(mut self, expr: T) -> Self
     where
@@ -85,6 +92,10 @@ impl Delete {
 }
 
 pub(crate) fn write_delete<W: SqlWriter>(w: &mut W, delete: &Delete) {
+    assert!(
+        matches!(&delete.table, Some(TableRef::Table(..))),
+        "DELETE requires a target table"
+    );
     if let Some(with) = &delete.with {
         write_with(w, with);
         w.push_char(' ');
@@ -94,6 +105,11 @@ pub(crate) fn write_delete<W: SqlWriter>(w: &mut W, delete: &Delete) {
 
     if let Some(table) = &delete.table {
         w.push_str("FROM ");
+        write_table_ref(w, table);
+    }
+
+    for (i, table) in delete.using.iter().enumerate() {
+        w.push_str(if i == 0 { " USING " } else { ", " });
         write_table_ref(w, table);
     }
 

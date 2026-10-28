@@ -12,24 +12,33 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use crate::expr::Expr;
+use crate::expr::write_expr;
 use crate::query::Select;
-use crate::query::write_select;
+use crate::query::Statement;
+use crate::query::write_statement;
 use crate::types::Iden;
 use crate::types::IntoIden;
 use crate::types::write_iden;
 use crate::value::Value;
-use crate::value::write_value;
 
 /// A WITH clause can contain one or multiple common table expressions.
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct With {
     ctes: Vec<CommonTableExpression>,
+    pub(super) recursive: bool,
 }
 
 impl With {
     /// Constructs a new WITH Clause.
     pub fn new() -> Self {
         Self::default()
+    }
+
+    /// Allow CTEs to reference themselves using WITH RECURSIVE.
+    pub fn recursive(mut self) -> Self {
+        self.recursive = true;
+        self
     }
 
     /// Adds a common table expression to this with clause.
@@ -63,14 +72,53 @@ impl CommonTableExpression {
     }
 
     /// Sets the CTE VALUES source.
-    pub fn values(mut self, values: Vec<Vec<Value>>) -> Self {
+    pub fn values<I, R>(self, values: I) -> Self
+    where
+        I: IntoIterator<Item = R>,
+        R: IntoIterator<Item = Value>,
+    {
+        self.expr_values(
+            values
+                .into_iter()
+                .map(|row| row.into_iter().map(Expr::value)),
+        )
+    }
+
+    /// Set VALUES rows containing expressions, including casts for parameter type inference.
+    ///
+    /// # Panics
+    /// Panics for empty rows or inconsistent row widths.
+    pub fn expr_values<I, R>(mut self, values: I) -> Self
+    where
+        I: IntoIterator<Item = R>,
+        R: IntoIterator<Item = Expr>,
+    {
+        let values: Vec<Vec<_>> = values
+            .into_iter()
+            .map(|row| row.into_iter().collect())
+            .collect();
+        assert!(
+            !values.is_empty() && !values[0].is_empty(),
+            "CTE VALUES requires nonempty rows"
+        );
+        assert!(
+            values.iter().all(|row| row.len() == values[0].len()),
+            "CTE VALUES rows must have equal widths"
+        );
         self.query = Query::Values(values);
         self
     }
 
     /// Sets the CTE SELECT source.
-    pub fn select(mut self, select: Select) -> Self {
-        self.query = Query::Select(Box::new(select));
+    pub fn select(self, select: Select) -> Self {
+        self.query(select)
+    }
+
+    /// Set a SELECT, INSERT, UPDATE, DELETE or MERGE source (MERGE requires PostgreSQL 17+).
+    ///
+    /// A data-modifying CTE needs RETURNING if its output is referenced by the outer query.
+    pub fn query(mut self, query: impl Into<Statement>) -> Self {
+        self.query = Query::Statement(Box::new(query.into()));
         self
     }
 
@@ -103,12 +151,18 @@ impl CommonTableExpression {
 
 #[derive(Debug, Clone, PartialEq)]
 enum Query {
-    Select(Box<Select>),
-    Values(Vec<Vec<Value>>),
+    Statement(Box<Statement>),
+    Values(Vec<Vec<Expr>>),
 }
 
 pub(crate) fn write_with<W: crate::writer::SqlWriter>(w: &mut W, with: &With) {
+    if with.ctes.is_empty() {
+        return;
+    }
     w.push_str("WITH ");
+    if with.recursive {
+        w.push_str("RECURSIVE ");
+    }
     for (i, cte) in with.ctes.iter().enumerate() {
         if i > 0 {
             w.push_str(", ");
@@ -135,13 +189,18 @@ pub(crate) fn write_with<W: crate::writer::SqlWriter>(w: &mut W, with: &With) {
             }
         }
         match &cte.query {
-            Query::Select(select) => {
+            Query::Statement(query) => {
                 w.push_char('(');
-                write_select(w, select);
+                write_statement(w, query);
                 w.push_char(')');
             }
             Query::Values(values) => {
-                w.push_str("VALUES ");
+                assert!(!values.is_empty(), "CTE requires a query or VALUES source");
+                assert!(
+                    cte.columns.len() <= values[0].len(),
+                    "CTE has more column names than VALUES expressions"
+                );
+                w.push_str("(VALUES ");
                 for (j, row) in values.iter().enumerate() {
                     if j > 0 {
                         w.push_str(", ");
@@ -151,10 +210,11 @@ pub(crate) fn write_with<W: crate::writer::SqlWriter>(w: &mut W, with: &With) {
                         if k > 0 {
                             w.push_str(", ");
                         }
-                        write_value(w, val);
+                        write_expr(w, val);
                     }
                     w.push_char(')');
                 }
+                w.push_char(')');
             }
         }
     }

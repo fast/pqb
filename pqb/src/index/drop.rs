@@ -33,11 +33,10 @@ impl DropIndex {
         Self::default()
     }
 
-    /// Build the SQL string with placeholders and return collected values.
+    /// Render DDL with inline literals and no parameters. PostgreSQL utility statements do not
+    /// accept bind parameters.
     pub fn to_values(&self) -> SqlWriterValues {
-        let mut w = SqlWriterValues::new();
-        write_drop_index(&mut w, self);
-        w
+        SqlWriterValues::from_sql(self.to_sql())
     }
 
     /// Convert the DROP INDEX statement to a PostgreSQL query string.
@@ -72,7 +71,7 @@ impl DropIndex {
         self
     }
 
-    /// Drop the index concurrently.
+    /// Drop one index concurrently, outside a transaction block. Cannot be combined with CASCADE.
     pub fn concurrently(mut self) -> Self {
         self.concurrently = true;
         self
@@ -92,6 +91,16 @@ impl DropIndex {
 }
 
 fn write_drop_index<W: SqlWriter>(w: &mut W, drop_index: &DropIndex) {
+    assert!(
+        !drop_index.indexes.is_empty(),
+        "DROP INDEX requires an index"
+    );
+    assert!(
+        !drop_index.concurrently
+            || (drop_index.indexes.len() == 1
+                && !matches!(drop_index.behavior, Some(DropBehavior::Cascade))),
+        "DROP INDEX CONCURRENTLY requires one index and does not support CASCADE"
+    );
     w.push_str("DROP INDEX ");
     if drop_index.concurrently {
         w.push_str("CONCURRENTLY ");

@@ -117,7 +117,7 @@ fn create_index_if_not_exists_custom_method() {
             .using("hnsw")
             .to_sql()
             .validate(),
-        @r#"CREATE INDEX IF NOT EXISTS "idx_tokens_value_hnsw" ON "tokens" USING hnsw ("value")"#
+        @r#"CREATE INDEX IF NOT EXISTS "idx_tokens_value_hnsw" ON "tokens" USING "hnsw" ("value")"#
     );
 }
 
@@ -186,5 +186,19 @@ fn create_index_concurrently() {
             .to_sql()
             .validate(),
         @r#"CREATE INDEX CONCURRENTLY IF NOT EXISTS "idx_orders_customer" ON "orders" ("customer_id")"#
+    );
+}
+
+#[test]
+fn case_expression_index() {
+    use pqb::expr::Case;
+    let sql = CreateIndex::new()
+        .table("payments")
+        .expr(Case::new(Expr::column("status").eq("paid"), Expr::column("amount")).otherwise(0))
+        .to_sql()
+        .validate();
+    assert_eq!(
+        sql,
+        "CREATE INDEX ON \"payments\" ((CASE WHEN \"status\" = 'paid' THEN \"amount\" ELSE 0 END))"
     );
 }

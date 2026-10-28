@@ -247,3 +247,43 @@ fn insert_on_conflict_do_nothing() {
         @r#"INSERT INTO "glyph" ("aspect", "image") VALUES ('abcd', 42.0321) ON CONFLICT ("id", "aspect") DO NOTHING"#
     );
 }
+
+#[test]
+fn bulk_insert_and_dynamic_row_errors() {
+    use pqb::query::InsertError;
+    use pqb::query::Select;
+    let query = Insert::new()
+        .into_table("users")
+        .rows([vec![1.into(), "Alice".into()], vec![2.into(), "Bob".into()]]);
+    query.to_sql().validate();
+    let (sql, values) = query.to_values().into_parts();
+    assert_eq!(
+        sql.validate(),
+        "INSERT INTO \"users\" VALUES ($1, $2), ($3, $4)"
+    );
+    assert_eq!(
+        values,
+        vec![1.into(), "Alice".into(), 2.into(), "Bob".into()]
+    );
+    assert_eq!(
+        Insert::new()
+            .columns(["id", "name"])
+            .try_values([1.into()])
+            .unwrap_err(),
+        InsertError::ColumnCount {
+            expected: 2,
+            actual: 1
+        }
+    );
+    assert_eq!(
+        Insert::new().try_values([]).unwrap_err(),
+        InsertError::EmptyRow
+    );
+
+    Insert::new()
+        .into_table("archive")
+        .columns(["id", "name"])
+        .select_from(Select::new().expr(Expr::asterisk()).from("users"))
+        .to_sql()
+        .validate();
+}

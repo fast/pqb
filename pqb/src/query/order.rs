@@ -51,15 +51,36 @@ impl Order {
     }
 
     /// Order by an expression in ascending order.
+    ///
+    /// Bare literal values are rejected; use [`Self::position`] for an output column number or
+    /// cast a value explicitly to order by a constant expression.
     pub fn expr<E>(expr: E) -> Self
     where
         E: Into<Expr>,
     {
+        let expr = expr.into();
+        expr.validate_sort_group_expr();
         Self {
-            expr: expr.into(),
+            expr,
             direction: SortDirection::Asc,
             nulls: None,
         }
+    }
+
+    /// Order a SELECT result by a one-based output column position, rendered inline even in bound
+    /// queries. Within aggregates and window definitions, PostgreSQL treats it as a constant.
+    pub fn position(position: u32) -> Self {
+        Self::expr(Expr::output_position(position))
+    }
+
+    pub(super) fn valid_for_set(&self) -> bool {
+        matches!(
+            self.expr,
+            Expr::Column(crate::types::ColumnRef::Column(crate::types::ColumnName(
+                None,
+                _
+            ))) | Expr::Custom(_)
+        )
     }
 
     /// Set the sort direction to ascending.
