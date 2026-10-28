@@ -28,12 +28,17 @@ repository.workspace = true
 rust-version.workspace = true
 
 [features]
-with-json = ["dep:serde_json"]
-with-uuid = ["dep:uuid"]
-with-chrono = ["dep:chrono"]
-with-rust_decimal = ["dep:rust_decimal"]
+with-json = ["dep:serde_json", "postgres-types?/with-serde_json-1", "sqlx?/json"]
+with-uuid = ["dep:uuid", "postgres-types?/with-uuid-1", "sqlx?/uuid"]
+with-chrono = ["dep:chrono", "postgres-types?/with-chrono-0_4", "sqlx?/chrono"]
+with-rust_decimal = ["dep:rust_decimal", "sqlx?/rust_decimal"]
+postgres = ["dep:postgres-types", "dep:bytes", "rust_decimal?/db-postgres"]
+sqlx = ["dep:sqlx"]
 
 [dependencies]
+bytes = { version = "1", optional = true }
+postgres-types = { version = "0.2", optional = true }
+sqlx = { version = "0.9", default-features = false, features = ["postgres"], optional = true }
 chrono = { version = "0.4", default-features = false, features = ["std"], optional = true }
 rust_decimal = { version = "1", default-features = false, features = ["std"], optional = true }
 serde_json = { version = "1", default-features = false, optional = true, features = [
@@ -42,6 +47,9 @@ serde_json = { version = "1", default-features = false, optional = true, feature
 uuid = { version = "1", default-features = false, optional = true }
 
 [dev-dependencies]
+tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
+tokio-postgres = "0.7"
+sqlx = { version = "0.9", default-features = false, features = ["postgres", "runtime-tokio"] }
 insta = { version = "1.46.3" }
 pg_query = { version = "6.1.1" }
 

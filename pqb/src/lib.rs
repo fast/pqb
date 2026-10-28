@@ -38,5 +38,9 @@ pub mod table;
 pub mod types;
 pub mod value;
 
+#[cfg(feature = "postgres")]
+mod postgres;
+#[cfg(feature = "sqlx")]
+mod sqlx;
 mod writer;
 pub use self::writer::SqlWriterValues;

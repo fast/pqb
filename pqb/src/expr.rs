@@ -696,12 +696,10 @@ pub(crate) fn write_expr<W: SqlWriter>(w: &mut W, expr: &Expr) {
         Expr::Unary(unary, expr) => write_unary_expr(w, unary, expr),
         Expr::Binary(lhs, op, rhs) => match (op, &**rhs) {
             (BinaryOp::In, Expr::Tuple(t)) if t.is_empty() => {
-                // 1 = 2 is always false <=> IN () is always false
-                write_binary_expr(w, &Expr::value(1), &BinaryOp::Equal, &Expr::value(2))
+                w.push_str("FALSE");
             }
             (BinaryOp::NotIn, Expr::Tuple(t)) if t.is_empty() => {
-                // 1 = 1 is always true <=> NOT IN () is always true
-                write_binary_expr(w, &Expr::value(1), &BinaryOp::Equal, &Expr::value(1))
+                w.push_str("TRUE");
             }
             _ => write_binary_expr(w, lhs, op, rhs),
         },

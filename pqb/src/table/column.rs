@@ -86,7 +86,6 @@ impl ColumnDef {
     }
 
     /// Set default value for the column.
-
     ///
     /// ## Panics
     /// This method will panic if the column is a generated column.
