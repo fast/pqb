@@ -168,6 +168,8 @@ let query = Select::new().expr(matrix).expr(shifted).to_values();
 | PostgreSQL operations | COPY text/CSV/binary, row locks, `NOWAIT`, `SKIP LOCKED`, table sampling, `EXPLAIN` options |
 | DDL | Create/alter/drop tables, identity/generated columns, relational constraints, create/drop indexes and schemas, RANGE/LIST/HASH partition management |
 
+Use `Order::position(1)` to sort by an output column number; literal values passed to `Order::expr` are rejected because PostgreSQL treats them differently from bind parameters. Set operations accept output column names and positions in ORDER BY; wrap the result in `from_subquery` before ordering by an expression.
+
 Joins and TABLESAMPLE attach to the most recently added FROM item. Add that item before calling join or sampling methods; appending another FROM item starts a separate join chain.
 
 ### MERGE
@@ -192,6 +194,8 @@ let query = Merge::new()
     )))
     .to_values();
 ```
+
+EXPLAIN execution options (`WAL`, `TIMING`, `SERIALIZE`) require an explicit `.analyze()`. PQB never enables ANALYZE implicitly, since it executes the statement. GENERIC_PLAN cannot be combined with ANALYZE.
 
 ### COPY
 

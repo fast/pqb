@@ -38,7 +38,7 @@ pub struct Merge {
     on: Option<Box<Expr>>,
     clauses: Vec<MergeWhen>,
     with: Option<With>,
-    returning: Option<Returning>,
+    pub(super) returning: Option<Returning>,
     only: bool,
 }
 

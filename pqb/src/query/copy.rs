@@ -88,7 +88,12 @@ impl Copy {
 
     /// Copy a SELECT or a data-modifying query with RETURNING to STDOUT.
     pub fn from_query(query: impl Into<Statement>) -> Self {
-        Self::new(CopyRelation::Query(Box::new(query.into())), false)
+        let query = query.into();
+        assert!(
+            query.returns_rows(),
+            "COPY data-modifying queries require RETURNING"
+        );
+        Self::new(CopyRelation::Query(Box::new(query)), false)
     }
 
     fn new(relation: CopyRelation, from: bool) -> Self {

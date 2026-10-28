@@ -202,6 +202,19 @@ impl Serialize {
 }
 
 fn write_explain<W: SqlWriter>(w: &mut W, explain: &Explain) {
+    assert!(explain.statement.is_some(), "EXPLAIN requires a statement");
+    let analyze = explain.analyze == Some(true);
+    assert!(
+        !(analyze && explain.generic_plan == Some(true)),
+        "ANALYZE and GENERIC_PLAN cannot be combined"
+    );
+    assert!(
+        analyze
+            || (explain.wal != Some(true)
+                && explain.timing != Some(true)
+                && !matches!(explain.serialize, Some(Serialize::Text | Serialize::Binary))),
+        "WAL, TIMING and SERIALIZE require explicit ANALYZE"
+    );
     w.push_str("EXPLAIN");
 
     let has_options = explain.analyze.is_some()

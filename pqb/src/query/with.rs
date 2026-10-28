@@ -72,12 +72,15 @@ impl CommonTableExpression {
     }
 
     /// Sets the CTE VALUES source.
-    pub fn values(self, values: Vec<Vec<Value>>) -> Self {
+    pub fn values<I, R>(self, values: I) -> Self
+    where
+        I: IntoIterator<Item = R>,
+        R: IntoIterator<Item = Value>,
+    {
         self.expr_values(
             values
                 .into_iter()
-                .map(|row| row.into_iter().map(Expr::value).collect())
-                .collect(),
+                .map(|row| row.into_iter().map(Expr::value)),
         )
     }
 
@@ -85,7 +88,15 @@ impl CommonTableExpression {
     ///
     /// # Panics
     /// Panics for empty rows or inconsistent row widths.
-    pub fn expr_values(mut self, values: Vec<Vec<Expr>>) -> Self {
+    pub fn expr_values<I, R>(mut self, values: I) -> Self
+    where
+        I: IntoIterator<Item = R>,
+        R: IntoIterator<Item = Expr>,
+    {
+        let values: Vec<Vec<_>> = values
+            .into_iter()
+            .map(|row| row.into_iter().collect())
+            .collect();
         assert!(
             !values.is_empty() && !values[0].is_empty(),
             "CTE VALUES requires nonempty rows"
@@ -185,6 +196,10 @@ pub(crate) fn write_with<W: crate::writer::SqlWriter>(w: &mut W, with: &With) {
             }
             Query::Values(values) => {
                 assert!(!values.is_empty(), "CTE requires a query or VALUES source");
+                assert!(
+                    cte.columns.len() <= values[0].len(),
+                    "CTE has more column names than VALUES expressions"
+                );
                 w.push_str("(VALUES ");
                 for (j, row) in values.iter().enumerate() {
                     if j > 0 {

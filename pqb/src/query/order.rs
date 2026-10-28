@@ -55,11 +55,44 @@ impl Order {
     where
         E: Into<Expr>,
     {
+        let expr = expr.into();
+        assert!(
+            !matches!(
+                expr,
+                Expr::Value(_)
+                    | Expr::Keyword(
+                        crate::expr::Keyword::Null
+                            | crate::expr::Keyword::True
+                            | crate::expr::Keyword::False
+                            | crate::expr::Keyword::Default
+                    )
+            ),
+            "ORDER BY requires an expression or column; use Order::position for an output position"
+        );
         Self {
-            expr: expr.into(),
+            expr,
             direction: SortDirection::Asc,
             nulls: None,
         }
+    }
+
+    /// Order by a one-based output column position, rendered inline even in bound queries.
+    pub fn position(position: u32) -> Self {
+        assert!(
+            position > 0 && position <= i32::MAX as u32,
+            "ORDER BY position must be a positive int4"
+        );
+        Self::expr(Expr::custom(position.to_string()))
+    }
+
+    pub(super) fn valid_for_set(&self) -> bool {
+        matches!(
+            self.expr,
+            Expr::Column(crate::types::ColumnRef::Column(crate::types::ColumnName(
+                None,
+                _
+            ))) | Expr::Custom(_)
+        )
     }
 
     /// Set the sort direction to ascending.

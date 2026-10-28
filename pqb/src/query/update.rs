@@ -34,7 +34,7 @@ pub struct Update {
     values: Vec<(Iden, Expr)>,
     from: Vec<TableRef>,
     conditions: Vec<Expr>,
-    returning: Option<Returning>,
+    pub(super) returning: Option<Returning>,
     with: Option<With>,
 }
 

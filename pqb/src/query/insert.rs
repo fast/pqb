@@ -38,8 +38,8 @@ pub struct Insert {
     columns: Vec<Iden>,
     source: Option<InsertValueSource>,
     on_conflict: Option<OnConflict>,
-    defaults: Option<u32>,
-    returning: Option<Returning>,
+    defaults: bool,
+    pub(super) returning: Option<Returning>,
     with: Option<With>,
 }
 
@@ -165,23 +165,13 @@ impl Insert {
     ///
     /// # Panics
     ///
-    /// Panics if known projection and target widths differ. Wildcard expansion is checked by
-    /// PostgreSQL.
+    /// Rendering panics if known projection and target widths differ. Wildcard expansion is checked
+    /// by PostgreSQL.
     pub fn select_from<S>(mut self, select: S) -> Self
     where
         S: Into<Select>,
     {
-        let select = select.into();
-        if !self.columns.is_empty()
-            && let Some(width) = select.columns_len()
-        {
-            assert_eq!(
-                width,
-                self.columns.len(),
-                "INSERT projection width does not match target columns"
-            );
-        }
-        self.source = Some(InsertValueSource::Select(Box::new(select)));
+        self.source = Some(InsertValueSource::Select(Box::new(select.into())));
         self
     }
 
@@ -189,7 +179,7 @@ impl Insert {
     pub fn default_values(mut self) -> Self {
         self.columns.clear();
         self.source = None;
-        self.defaults = Some(1);
+        self.defaults = true;
         self
     }
 
@@ -200,7 +190,7 @@ impl Insert {
     /// Panics for `n > 1`. PostgreSQL's DEFAULT VALUES inserts exactly one row.
     pub fn or_default_values(mut self, n: u32) -> Self {
         assert!(n <= 1, "DEFAULT VALUES inserts exactly one row");
-        self.defaults = Some(n);
+        self.defaults = n == 1;
         self
     }
 }
@@ -245,7 +235,7 @@ pub(crate) fn write_insert<W: SqlWriter>(w: &mut W, insert: &Insert) {
         "INSERT requires a target table"
     );
     assert!(
-        insert.source.is_some() || (insert.defaults == Some(1) && insert.columns.is_empty()),
+        insert.source.is_some() || (insert.defaults && insert.columns.is_empty()),
         "INSERT requires VALUES, SELECT or DEFAULT VALUES"
     );
     if let Some(InsertValueSource::Values(rows)) = &insert.source
@@ -254,6 +244,16 @@ pub(crate) fn write_insert<W: SqlWriter>(w: &mut W, insert: &Insert) {
         assert!(
             rows.iter().all(|row| row.len() == insert.columns.len()),
             "INSERT row width does not match target columns"
+        );
+    }
+    if let Some(InsertValueSource::Select(select)) = &insert.source
+        && !insert.columns.is_empty()
+        && let Some(width) = select.columns_len()
+    {
+        assert_eq!(
+            width,
+            insert.columns.len(),
+            "INSERT projection width does not match target columns"
         );
     }
     if let Some(with) = &insert.with {
@@ -268,10 +268,7 @@ pub(crate) fn write_insert<W: SqlWriter>(w: &mut W, insert: &Insert) {
         write_table_ref(w, table);
     }
 
-    if insert.defaults.unwrap_or_default() != 0
-        && insert.columns.is_empty()
-        && insert.source.is_none()
-    {
+    if insert.defaults && insert.columns.is_empty() && insert.source.is_none() {
         w.push_str(" DEFAULT VALUES");
     } else {
         if !insert.columns.is_empty() {

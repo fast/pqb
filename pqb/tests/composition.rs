@@ -139,3 +139,52 @@ fn joined_mutations_and_aliased_returning() {
     assert!(sql.validate().contains(" USING \"changes\" WHERE "));
     assert_eq!(values, vec![true.into()]);
 }
+
+#[test]
+fn composed_queries_reject_incompatible_shapes_and_clauses() {
+    use pqb::query::Copy;
+    use pqb::query::Explain;
+    use pqb::query::Insert;
+    use pqb::query::RowLevelLock;
+    assert!(
+        std::panic::catch_unwind(|| Select::new().expr(1).union(Select::new().exprs([1, 2])))
+            .is_err()
+    );
+    assert!(
+        std::panic::catch_unwind(|| Select::new()
+            .expr_as(1, "n")
+            .union_all(Select::new().expr(2))
+            .order_by([Order::expr(Expr::column("n").add(1))])
+            .to_sql())
+        .is_err()
+    );
+    assert!(std::panic::catch_unwind(|| Order::expr(1)).is_err());
+    assert!(
+        std::panic::catch_unwind(|| Select::new()
+            .column("id")
+            .from("items")
+            .distinct()
+            .lock(RowLevelLock::for_update())
+            .to_sql())
+        .is_err()
+    );
+    assert!(
+        std::panic::catch_unwind(|| Insert::new()
+            .into_table("items")
+            .select_from(Select::new().expr(1))
+            .columns(["id", "name"])
+            .to_sql())
+        .is_err()
+    );
+    assert!(
+        std::panic::catch_unwind(|| Copy::from_query(Delete::new().from_table("items"))).is_err()
+    );
+    assert!(
+        std::panic::catch_unwind(|| Explain::new()
+            .analyze()
+            .generic_plan(true)
+            .statement(Select::new().expr(1))
+            .to_sql())
+        .is_err()
+    );
+}

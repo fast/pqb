@@ -485,12 +485,7 @@ async fn postgres_merges_rows_and_returns_actions() -> Result<(), Error> {
         .expr_values(
             [[1, 5], [2, 0], [3, 7], [5, -1]]
                 .into_iter()
-                .map(|row| {
-                    row.into_iter()
-                        .map(|v| Expr::value(v).cast_as("integer"))
-                        .collect()
-                })
-                .collect(),
+                .map(|row| row.into_iter().map(|v| Expr::value(v).cast_as("integer"))),
         );
     let mut merge = Merge::new()
         .into_table(TableRef::from("inventory").alias("t"))
@@ -861,6 +856,41 @@ async fn postgres_preserves_from_and_join_scope() -> Result<(), Error> {
         (1, 1, 2, 3)
     );
     client.query_one(&query.to_sql(), &[]).await?;
+    let ordered = source(2)
+        .union_all(source(1))
+        .order_by([Order::position(1)]);
+    let bound = ordered.to_values();
+    let ids: Vec<i32> = client
+        .query(bound.sql(), &bound.postgres_params())
+        .await?
+        .iter()
+        .map(|row| row.get(0))
+        .collect();
+    assert_eq!(ids, [1, 2]);
+    let explain = pqb::query::Explain::new()
+        .analyze()
+        .wal(true)
+        .timing(false)
+        .statement(ordered)
+        .to_values();
+    assert!(
+        !client
+            .query(explain.sql(), &explain.postgres_params())
+            .await?
+            .is_empty()
+    );
+    let insert = Insert::new()
+        .into_table("join_scope")
+        .select_from(source(4))
+        .columns(["id"])
+        .to_values();
+    assert_eq!(
+        client
+            .execute(insert.sql(), &insert.postgres_params())
+            .await?,
+        1
+    );
+
     drop(client);
     connection.await??;
     Ok(())

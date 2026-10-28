@@ -68,6 +68,16 @@ impl From<Merge> for Statement {
 }
 
 impl Statement {
+    pub(super) fn returns_rows(&self) -> bool {
+        match self {
+            Self::Select(_) => true,
+            Self::Insert(q) => q.returning.is_some(),
+            Self::Update(q) => q.returning.is_some(),
+            Self::Delete(q) => q.returning.is_some(),
+            Self::Merge(q) => q.returning.is_some(),
+        }
+    }
+
     /// Render a query with inline literals.
     pub fn to_sql(&self) -> String {
         let mut sql = String::new();

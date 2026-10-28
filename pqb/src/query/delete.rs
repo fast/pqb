@@ -30,7 +30,7 @@ pub struct Delete {
     table: Option<TableRef>,
     using: Vec<TableRef>,
     conditions: Vec<Expr>,
-    returning: Option<Returning>,
+    pub(super) returning: Option<Returning>,
     with: Option<With>,
 }
 

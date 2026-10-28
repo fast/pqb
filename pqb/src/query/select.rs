@@ -107,7 +107,12 @@ impl Select {
         I: IntoIterator<Item = E>,
         E: Into<Expr>,
     {
-        self.distinct = Some(expressions.into_iter().map(Into::into).collect());
+        let expressions: Vec<_> = expressions.into_iter().map(Into::into).collect();
+        assert!(
+            !expressions.is_empty(),
+            "DISTINCT ON requires expressions; use distinct for all columns"
+        );
+        self.distinct = Some(expressions);
         self
     }
 
@@ -116,6 +121,13 @@ impl Select {
     /// ORDER BY, LIMIT, OFFSET and WITH added afterwards apply to the combined result.
     /// To filter or project that result, wrap it with [`Self::from_subquery`].
     pub fn combine(self, op: SetOperator, right: Select) -> Self {
+        assert!(
+            self.lock.is_none() && right.lock.is_none(),
+            "set operation operands cannot have row locks"
+        );
+        if let (Some(left), Some(right)) = (self.columns_len(), right.columns_len()) {
+            assert_eq!(left, right, "set operation projection widths must match");
+        }
         Self {
             set: Some(Box::new(SetOperation {
                 left: self,
@@ -397,12 +409,20 @@ impl Select {
 
     /// Offset number of returned rows.
     pub fn offset(mut self, offset: u64) -> Self {
+        assert!(
+            offset <= i64::MAX as u64,
+            "OFFSET must fit a PostgreSQL bigint"
+        );
         self.offset = Some(offset);
         self
     }
 
     /// Limit the number of returned rows.
     pub fn limit(mut self, limit: u64) -> Self {
+        assert!(
+            limit <= i64::MAX as u64,
+            "LIMIT must fit a PostgreSQL bigint"
+        );
         self.limit = Some(limit);
         self
     }
@@ -632,6 +652,10 @@ pub(crate) fn write_select<W: SqlWriter>(w: &mut W, select: &Select) {
 
     if let Some(set) = &select.set {
         assert!(
+            select.orders.iter().all(Order::valid_for_set),
+            "set operations order by output names or positions; wrap in from_subquery to order by expressions"
+        );
+        assert!(
             select.selects.is_empty()
                 && select.from.is_empty()
                 && select.conditions.is_empty()
@@ -659,6 +683,11 @@ pub(crate) fn write_select<W: SqlWriter>(w: &mut W, select: &Select) {
         return;
     }
 
+    assert!(
+        select.lock.is_none()
+            || (select.distinct.is_none() && select.groups.is_empty() && select.having.is_empty()),
+        "row locks cannot be combined with DISTINCT, GROUP BY or HAVING"
+    );
     w.push_str("SELECT ");
     if let Some(distinct) = &select.distinct {
         w.push_str("DISTINCT ");
