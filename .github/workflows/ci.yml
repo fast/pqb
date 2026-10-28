@@ -47,6 +47,7 @@ jobs:
         with:
           tool: typos-cli,taplo-cli,hawkeye
       - run: cargo x lint
+      - run: cargo x check
 
   test:
     name: Run tests
@@ -93,7 +94,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
       - name: Execute generated queries with both drivers
-        run: cargo test --locked -p pqb --all-features --test postgres_live -- --ignored
+        run: cargo x test --postgres
 
   required:
     name: Required

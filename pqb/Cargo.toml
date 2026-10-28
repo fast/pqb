@@ -45,7 +45,7 @@ with-rust_decimal = ["dep:rust_decimal", "sqlx?/rust_decimal"]
 with-uuid = ["dep:uuid", "postgres-types?/with-uuid-1", "sqlx?/uuid"]
 
 [dependencies]
-bytes = { version = "1", optional = true }
+bytes = { workspace = true, optional = true }
 chrono = { version = "0.4", default-features = false, features = [
   "std",
 ], optional = true }
@@ -57,24 +57,13 @@ rust_decimal = { version = "1", default-features = false, features = [
 serde_json = { version = "1", default-features = false, optional = true, features = [
   "std",
 ] }
-sqlx = { version = "0.9", default-features = false, features = [
-  "postgres",
-], optional = true }
+sqlx = { workspace = true, optional = true }
 uuid = { version = "1", default-features = false, optional = true }
 
 [dev-dependencies]
-futures-util = { version = "0.3", default-features = false, features = [
-  "sink",
-  "std",
-] }
 insta = { version = "1.46.3" }
 pg_query = { version = "6.1.1" }
-sqlx = { version = "0.9", default-features = false, features = [
-  "postgres",
-  "runtime-tokio",
-] }
-tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
-tokio-postgres = "0.7"
+tokio-postgres.workspace = true
 
 [lints]
 workspace = true

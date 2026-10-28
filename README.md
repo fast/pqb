@@ -354,15 +354,18 @@ The minimum Rust version may increase in minor releases; patch releases retain t
 
 ## Development
 
+`pqb/` contains the published library and offline SQL tests. `tests-integration/` contains real PostgreSQL workflows, grouped by queries, values, MERGE, COPY, and partitions. Database drivers and their runtimes are development dependencies of that separate package.
+
 ```shell
+cargo x check
 cargo x test
 cargo x lint
 # Point this at a disposable PostgreSQL instance. Tests use temporary tables.
 PQB_TEST_DATABASE_URL=postgresql://postgres:postgres@localhost/postgres \
-  cargo test -p pqb --all-features --test postgres_live -- --ignored
+  cargo x test --postgres
 ```
 
-`cargo x test` covers both the core and all optional features. The database tests are explicitly ignored during ordinary offline test runs and required in CI. Each feature can also be checked independently with `cargo check -p pqb --no-default-features --features <feature>`.
+`cargo x test` tests the core in isolation before testing the workspace with all optional features. The database tests are explicitly ignored during ordinary offline test runs and required in CI. `cargo x check` checks each library feature independently, without workspace feature unification. See [AGENTS.md](AGENTS.md) for repository guidelines and [CHANGELOG.md](CHANGELOG.md) for user-visible changes.
 
 ## License and origins
 

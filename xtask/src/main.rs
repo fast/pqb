@@ -27,6 +27,7 @@ impl Command {
     fn run(self) {
         match self.sub {
             SubCommand::Build(cmd) => cmd.run(),
+            SubCommand::Check(cmd) => cmd.run(),
             SubCommand::Lint(cmd) => cmd.run(),
             SubCommand::Test(cmd) => cmd.run(),
         }
@@ -37,9 +38,11 @@ impl Command {
 enum SubCommand {
     #[clap(about = "Compile workspace packages.")]
     Build(CommandBuild),
+    #[clap(about = "Check the library with each optional feature independently.")]
+    Check(CommandCheck),
     #[clap(about = "Run format and clippy checks.")]
     Lint(CommandLint),
-    #[clap(about = "Run unit tests.")]
+    #[clap(about = "Run offline tests, or opt into real PostgreSQL workflows.")]
     Test(CommandTest),
 }
 
@@ -56,13 +59,71 @@ impl CommandBuild {
 }
 
 #[derive(Parser)]
+struct CommandCheck;
+
+impl CommandCheck {
+    fn run(self) {
+        // Keep this list in sync with pqb/Cargo.toml. Each invocation avoids workspace feature
+        // unification with the driver tests and example applications.
+        for feature in [
+            None,
+            Some("postgres"),
+            Some("sqlx"),
+            Some("with-chrono"),
+            Some("with-json"),
+            Some("with-rust_decimal"),
+            Some("with-uuid"),
+        ] {
+            let mut cmd = find_command("cargo");
+            cmd.args([
+                "check",
+                "--locked",
+                "--package",
+                "pqb",
+                "--lib",
+                "--no-default-features",
+            ]);
+            if let Some(feature) = feature {
+                cmd.args(["--features", feature]);
+            }
+            run_command(cmd);
+        }
+    }
+}
+
+#[derive(Parser)]
 struct CommandTest {
-    #[arg(long, help = "Run tests serially and do not capture output.")]
+    #[arg(long, help = "Do not capture test output.")]
     no_capture: bool,
+
+    #[arg(long, help = "Run database tests using PQB_TEST_DATABASE_URL.")]
+    postgres: bool,
 }
 
 impl CommandTest {
     fn run(self) {
+        if self.postgres {
+            assert!(
+                std::env::var_os("PQB_TEST_DATABASE_URL").is_some_and(|url| !url.is_empty()),
+                "set PQB_TEST_DATABASE_URL to a disposable PostgreSQL database"
+            );
+            let mut cmd = find_command("cargo");
+            cmd.args([
+                "test",
+                "--locked",
+                "--package",
+                "tests-integration",
+                "--test",
+                "postgres",
+                "--",
+                "--ignored",
+            ]);
+            if self.no_capture {
+                cmd.arg("--nocapture");
+            }
+            run_command(cmd);
+            return;
+        }
         run_command(make_test_cmd(self.no_capture, false));
         run_command(make_test_cmd(self.no_capture, true));
     }
@@ -131,12 +192,12 @@ fn make_build_cmd(locked: bool) -> StdCommand {
 
 fn make_test_cmd(no_capture: bool, all_features: bool) -> StdCommand {
     let mut cmd = find_command("cargo");
-    cmd.args(["test", "--workspace"]);
-    cmd.arg(if all_features {
-        "--all-features"
+    cmd.args(["test", "--locked"]);
+    if all_features {
+        cmd.args(["--workspace", "--all-features"]);
     } else {
-        "--no-default-features"
-    });
+        cmd.args(["--package", "pqb", "--no-default-features"]);
+    }
     if no_capture {
         cmd.args(["--", "--nocapture"]);
     }

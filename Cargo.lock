@@ -1308,7 +1308,6 @@ version = "0.1.4"
 dependencies = [
  "bytes",
  "chrono",
- "futures-util",
  "insta",
  "pg_query",
  "postgres-protocol",
@@ -1316,7 +1315,6 @@ dependencies = [
  "rust_decimal",
  "serde_json",
  "sqlx",
- "tokio",
  "tokio-postgres",
  "uuid",
 ]
@@ -1983,6 +1981,19 @@ dependencies = [
  "once_cell",
  "rustix 1.1.4",
  "windows-sys 0.61.2",
+]
+
+[[package]]
+name = "tests-integration"
+version = "0.0.0"
+dependencies = [
+ "bytes",
+ "futures-util",
+ "pqb",
+ "serde_json",
+ "sqlx",
+ "tokio",
+ "tokio-postgres",
 ]
 
 [[package]]
