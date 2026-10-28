@@ -65,9 +65,8 @@ fn queries_copy_and_partitions_execute() {
             Expr::column(("a", "id")).eq(Expr::column(("b", "id"))),
         )
         .from_subquery(Select::new().expr_as(2, "id"), "c");
-    let import = Copy::from_table("tasks")
-        .columns(["id", "title"])
-        .format(CopyFormat::Csv);
+    // Text input keeps the end marker compatible with older psql clients on PostgreSQL 18.
+    let import = Copy::from_table("tasks").columns(["id", "title"]);
     let export = Copy::from_query(
         Select::new()
             .columns(["id", "title"])
@@ -100,7 +99,7 @@ fn queries_copy_and_partitions_execute() {
         .table("events")
         .attach_partition("events_low", PartitionBound::range([0], [10]));
     let script = format!(
-        "BEGIN;\n{};\n{};\nPREPARE tasks_query(integer, text) AS {};\nEXECUTE tasks_query(1, 'hidden');\n{};\n{};\n4,copied\n\\.\n{};\n{};\n{};\n{};\n{};\n{};\n{};\n{};\n{};\nROLLBACK;\n",
+        "BEGIN;\n{};\n{};\nPREPARE tasks_query(integer, text) AS {};\nEXECUTE tasks_query(1, 'hidden');\n{};\n{};\n4\tcopied\n\\.\n{};\n{};\n{};\n{};\n{};\n{};\n{};\n{};\n{};\nROLLBACK;\n",
         table.to_sql(),
         insert.to_sql(),
         query.sql(),
