@@ -138,8 +138,21 @@ impl Insert {
         self
     }
 
-    /// Insert `n` rows with default values if columns and values are not supplied.
+    /// Use DEFAULT VALUES as the source, replacing any previous source.
+    pub fn default_values(mut self) -> Self {
+        self.columns.clear();
+        self.source = None;
+        self.defaults = Some(1);
+        self
+    }
+
+    /// Insert one default row if columns and values are not supplied; zero disables the fallback.
+    ///
+    /// # Panics
+    ///
+    /// Panics for `n > 1`. PostgreSQL's DEFAULT VALUES inserts exactly one row.
     pub fn or_default_values(mut self, n: u32) -> Self {
+        assert!(n <= 1, "DEFAULT VALUES inserts exactly one row");
         self.defaults = Some(n);
         self
     }
@@ -168,14 +181,7 @@ pub(crate) fn write_insert<W: SqlWriter>(w: &mut W, insert: &Insert) {
         && insert.columns.is_empty()
         && insert.source.is_none()
     {
-        let num_rows = insert.defaults.unwrap_or_default();
-        w.push_str(" VALUES ");
-        for i in 0..num_rows {
-            if i > 0 {
-                w.push_str(", ");
-            }
-            w.push_str("(DEFAULT)");
-        }
+        w.push_str(" DEFAULT VALUES");
     } else {
         w.push_str(" (");
         for (i, col) in insert.columns.iter().enumerate() {
@@ -208,13 +214,13 @@ pub(crate) fn write_insert<W: SqlWriter>(w: &mut W, insert: &Insert) {
                 InsertValueSource::Select(select) => write_select(w, select),
             }
         }
+    }
 
-        if let Some(on_conflict) = &insert.on_conflict {
-            write_on_conflict(w, on_conflict);
-        }
+    if let Some(on_conflict) = &insert.on_conflict {
+        write_on_conflict(w, on_conflict);
+    }
 
-        if let Some(returning) = &insert.returning {
-            write_returning(w, returning);
-        }
+    if let Some(returning) = &insert.returning {
+        write_returning(w, returning);
     }
 }

@@ -38,11 +38,10 @@ impl AlterTable {
         Self::default()
     }
 
-    /// Build the SQL string with placeholders and return collected values.
+    /// Render DDL with inline literals and no parameters. PostgreSQL utility statements do not
+    /// accept bind parameters.
     pub fn to_values(&self) -> SqlWriterValues {
-        let mut w = SqlWriterValues::new();
-        write_alter_table(&mut w, self);
-        w
+        SqlWriterValues::from_sql(self.to_sql())
     }
 
     /// Convert the alter table statement to a PostgreSQL query string.

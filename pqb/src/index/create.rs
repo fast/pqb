@@ -47,11 +47,10 @@ impl CreateIndex {
         Self::default()
     }
 
-    /// Build the SQL string with placeholders and return collected values.
+    /// Render DDL with inline literals and no parameters. PostgreSQL utility statements do not
+    /// accept bind parameters.
     pub fn to_values(&self) -> SqlWriterValues {
-        let mut w = SqlWriterValues::new();
-        write_create_index(&mut w, self);
-        w
+        SqlWriterValues::from_sql(self.to_sql())
     }
 
     /// Convert the CREATE INDEX statement to a PostgreSQL query string.
@@ -117,7 +116,9 @@ impl CreateIndex {
         self
     }
 
-    /// Set index as primary
+    /// Use this definition as a primary key inside CREATE TABLE.
+    ///
+    /// Rendering this definition as a standalone index panics: primary keys are table constraints.
     pub fn primary(mut self) -> Self {
         self.primary = true;
         self
@@ -268,13 +269,15 @@ where
 }
 
 fn write_create_index<W: SqlWriter>(w: &mut W, index: &CreateIndex) {
-    w.push_str("CREATE INDEX ");
-    if index.primary {
-        w.push_str("PRIMARY KEY ");
-    }
+    assert!(
+        !index.primary,
+        "primary keys must be created as table constraints"
+    );
+    w.push_str("CREATE ");
     if index.unique {
         w.push_str("UNIQUE ");
     }
+    w.push_str("INDEX ");
     if index.concurrently {
         w.push_str("CONCURRENTLY ");
     }
@@ -306,8 +309,7 @@ fn write_create_index<W: SqlWriter>(w: &mut W, index: &CreateIndex) {
 pub(crate) fn write_table_index<W: SqlWriter>(w: &mut W, index: &CreateIndex) {
     if index.primary {
         w.push_str("PRIMARY KEY ");
-    }
-    if index.unique {
+    } else if index.unique {
         w.push_str("UNIQUE ");
     }
     write_index_columns(w, &index.columns);

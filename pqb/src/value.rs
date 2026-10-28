@@ -169,6 +169,8 @@ pub(crate) fn write_value<W: SqlWriter>(w: &mut W, value: &Value) {
         Value::SmallUnsigned(Some(u)) => w.push_fmt(format_args!("{u}")),
         Value::Unsigned(Some(u)) => w.push_fmt(format_args!("{u}")),
         Value::BigUnsigned(Some(u)) => w.push_fmt(format_args!("{u}")),
+        Value::Float(Some(f)) if !f.is_finite() => write_special_float(w, f64::from(*f), "real"),
+        Value::Double(Some(f)) if !f.is_finite() => write_special_float(w, *f, "double precision"),
         Value::Float(Some(f)) => w.push_fmt(format_args!("{f}")),
         Value::Double(Some(f)) => w.push_fmt(format_args!("{f}")),
         Value::String(Some(s)) => write_string_value(w, s.as_str()),
@@ -204,6 +206,10 @@ fn write_array_value<W: SqlWriter>(w: &mut W, values: &[Value]) {
 }
 
 fn write_string_value<W: SqlWriter>(w: &mut W, value: &str) {
+    assert!(
+        !value.contains('\0'),
+        "PostgreSQL text cannot contain NUL bytes"
+    );
     if should_escape(value) {
         write_string_escaped(w, value)
     } else {
@@ -211,6 +217,17 @@ fn write_string_value<W: SqlWriter>(w: &mut W, value: &str) {
         w.push_str(value);
         w.push_str("'");
     }
+}
+
+fn write_special_float<W: SqlWriter>(w: &mut W, value: f64, ty: &str) {
+    let literal = if value.is_nan() {
+        "NaN"
+    } else if value.is_sign_positive() {
+        "Infinity"
+    } else {
+        "-Infinity"
+    };
+    w.push_fmt(format_args!("'{literal}'::{ty}"));
 }
 
 fn write_string_escaped<W: SqlWriter>(w: &mut W, value: &str) {

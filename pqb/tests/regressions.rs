@@ -1,0 +1,116 @@
+// Copyright 2026 FastLabs Developers
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+mod common;
+
+use common::ValidateSql;
+use pqb::expr::Expr;
+use pqb::index::CreateIndex;
+use pqb::query::CommonTableExpression;
+use pqb::query::Insert;
+use pqb::query::OnConflict;
+use pqb::query::Returning;
+use pqb::query::Select;
+use pqb::query::With;
+use pqb::table::ColumnDef;
+use pqb::table::CreateTable;
+
+#[test]
+fn values_cte_binds_before_outer_query() {
+    let query = Select::new()
+        .with(
+            With::new().cte(
+                CommonTableExpression::new("input")
+                    .column("name")
+                    .values(vec![vec!["O'Reilly".into()], vec!["世界".into()]]),
+            ),
+        )
+        .column("name")
+        .from("input")
+        .and_where(Expr::column("name").ne("ignored"));
+    query.to_sql().validate();
+    let (sql, values) = query.to_values().into_parts();
+    assert_eq!(
+        sql.validate(),
+        "WITH \"input\" (\"name\") AS (VALUES ($1), ($2)) SELECT \"name\" FROM \"input\" WHERE \"name\" <> $3"
+    );
+    assert_eq!(
+        values,
+        vec!["O'Reilly".into(), "世界".into(), "ignored".into()]
+    );
+}
+
+#[test]
+fn default_insert_preserves_conflict_and_returning() {
+    let query = Insert::new()
+        .into_table("events")
+        .default_values()
+        .on_conflict(OnConflict::constraint("odd\"key").do_nothing())
+        .returning(Returning::all());
+    assert_eq!(
+        query.to_sql().validate(),
+        "INSERT INTO \"events\" DEFAULT VALUES ON CONFLICT ON CONSTRAINT \"odd\"\"key\" DO NOTHING RETURNING *"
+    );
+    let (sql, values) = query.to_values().into_parts();
+    assert_eq!(sql.validate(), query.to_sql());
+    assert!(values.is_empty());
+}
+
+#[test]
+fn ddl_literals_are_not_bind_parameters() {
+    let table = CreateTable::new()
+        .table("events")
+        .column(ColumnDef::new("name").text().default("O'Reilly".into()));
+    let (sql, values) = table.to_values().into_parts();
+    assert_eq!(sql.validate(), table.to_sql());
+    assert!(values.is_empty());
+
+    let index = CreateIndex::new()
+        .name("active_names")
+        .table("events")
+        .unique()
+        .column("name")
+        .index_where(Expr::column("name").ne("deleted"));
+    let (sql, values) = index.to_values().into_parts();
+    assert!(sql.clone().validate().starts_with("CREATE UNIQUE INDEX "));
+    assert_eq!(sql, index.to_sql());
+    assert!(values.is_empty());
+}
+
+#[test]
+fn truth_tests_do_not_bind_sql_keywords() {
+    let query = Select::new()
+        .column("active")
+        .from("users")
+        .and_where(Expr::column("active").is(true))
+        .and_where(Expr::column("id").eq(42));
+    let (sql, values) = query.to_values().into_parts();
+    assert_eq!(
+        sql.validate(),
+        "SELECT \"active\" FROM \"users\" WHERE \"active\" IS TRUE AND \"id\" = $1"
+    );
+    assert_eq!(values, vec![42.into()]);
+}
+
+#[test]
+fn non_finite_floats_are_typed_literals() {
+    let query = Select::new()
+        .expr(f64::NAN)
+        .expr(f64::INFINITY)
+        .expr(f32::NEG_INFINITY);
+    assert_eq!(
+        query.to_sql().validate(),
+        "SELECT 'NaN'::double precision, 'Infinity'::double precision, '-Infinity'::real"
+    );
+}

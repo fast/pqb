@@ -47,6 +47,7 @@ impl SqlWriter for String {
 }
 
 /// SQL writer that collects parameters for prepared statements.
+#[derive(Debug, Clone, PartialEq)]
 pub struct SqlWriterValues {
     sql: String,
     values: Vec<Value>,
@@ -66,6 +67,10 @@ impl SqlWriterValues {
     /// Consume the writer and return the SQL string and collected values.
     pub fn into_parts(self) -> (String, Vec<Value>) {
         (self.sql, self.values)
+    }
+
+    pub(crate) fn from_sql(sql: String) -> Self {
+        Self { sql, ..Self::new() }
     }
 }
 

@@ -30,6 +30,7 @@ use crate::types::IntoIden;
 use crate::types::write_iden;
 use crate::types::write_table_name;
 use crate::value::Value;
+use crate::value::write_value;
 use crate::writer::SqlWriter;
 
 /// SQL keywords.
@@ -648,7 +649,13 @@ fn write_binary_expr<W: SqlWriter>(w: &mut W, lhs: &Expr, op: &BinaryOp, rhs: &E
     if right_paren {
         w.push_char('(');
     }
-    write_expr(w, rhs);
+    // IS takes SQL truth/null keywords, not a parameter expression.
+    match (op, rhs) {
+        (BinaryOp::Is | BinaryOp::IsNot, Expr::Value(Value::Bool(value))) => {
+            write_value(w, &Value::Bool(*value));
+        }
+        _ => write_expr(w, rhs),
+    }
     if right_paren {
         w.push_char(')');
     }

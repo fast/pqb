@@ -88,9 +88,9 @@ const fn is_escaped_iden(string: &str) -> bool {
     true
 }
 
-impl From<&'static str> for Iden {
-    fn from(name: &'static str) -> Self {
-        Iden::new(name)
+impl From<&str> for Iden {
+    fn from(name: &str) -> Self {
+        Iden::new(name.to_owned())
     }
 }
 

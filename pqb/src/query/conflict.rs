@@ -70,7 +70,7 @@ impl OnConflict {
     /// Set ON CONSTRAINT target constraint name.
     pub fn constraint(constraint: impl Into<String>) -> Self {
         OnConflict {
-            targets: OnConflictTarget::Constraint(constraint.into()),
+            targets: OnConflictTarget::Constraint(constraint.into().into_iden()),
             target_conditions: vec![],
             action: None,
             action_conditions: vec![],
@@ -187,7 +187,7 @@ impl OnConflict {
 #[derive(Debug, Clone, PartialEq)]
 enum OnConflictTarget {
     Exprs(Vec<Expr>),
-    Constraint(String),
+    Constraint(Iden),
 }
 
 /// Represents ON CONFLICT (upsert) actions
@@ -229,9 +229,7 @@ pub(crate) fn write_on_conflict<W: SqlWriter>(w: &mut W, on_conflict: &OnConflic
         }
         OnConflictTarget::Constraint(constraint) => {
             w.push_str(" ON CONSTRAINT ");
-            w.push_char('"');
-            w.push_str(constraint);
-            w.push_char('"');
+            write_iden(w, constraint);
         }
     }
     if let Some(condition) = Expr::from_conditions(on_conflict.target_conditions.clone()) {

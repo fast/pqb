@@ -18,7 +18,6 @@ use crate::types::Iden;
 use crate::types::IntoIden;
 use crate::types::write_iden;
 use crate::value::Value;
-use crate::value::write_value;
 
 /// A WITH clause can contain one or multiple common table expressions.
 #[derive(Debug, Clone, Default, PartialEq)]
@@ -141,7 +140,7 @@ pub(crate) fn write_with<W: crate::writer::SqlWriter>(w: &mut W, with: &With) {
                 w.push_char(')');
             }
             Query::Values(values) => {
-                w.push_str("VALUES ");
+                w.push_str("(VALUES ");
                 for (j, row) in values.iter().enumerate() {
                     if j > 0 {
                         w.push_str(", ");
@@ -151,10 +150,11 @@ pub(crate) fn write_with<W: crate::writer::SqlWriter>(w: &mut W, with: &With) {
                         if k > 0 {
                             w.push_str(", ");
                         }
-                        write_value(w, val);
+                        w.push_param(val.clone());
                     }
                     w.push_char(')');
                 }
+                w.push_char(')');
             }
         }
     }
