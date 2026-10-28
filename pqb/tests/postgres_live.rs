@@ -61,6 +61,7 @@ fn database_url() -> String {
 fn value_checks() -> Select {
     let date = NaiveDate::from_ymd_opt(2026, 10, 28).unwrap();
     let timestamp = DateTime::parse_from_rfc3339("2026-10-28T12:34:56+08:00").unwrap();
+    let bc = NaiveDate::from_ymd_opt(0, 1, 1).unwrap();
     let checks: Vec<(Value, &str, &str)> = vec![
         (true.into(), "boolean", "TRUE"),
         (127_i8.into(), "smallint", "127"),
@@ -74,6 +75,21 @@ fn value_checks() -> Select {
             "decode('00275cff', 'hex')",
         ),
         (date.into(), "date", "DATE '2026-10-28'"),
+        (bc.into(), "date", "DATE '0001-01-01 BC'"),
+        (
+            NaiveDate::from_ymd_opt(10000, 1, 1)
+                .unwrap()
+                .and_hms_opt(4, 34, 56)
+                .unwrap()
+                .into(),
+            "timestamp",
+            "TIMESTAMP '10000-01-01 04:34:56'",
+        ),
+        (
+            bc.and_hms_opt(4, 34, 56).unwrap().and_utc().into(),
+            "timestamptz",
+            "TIMESTAMPTZ '0001-01-01 04:34:56+00 BC'",
+        ),
         (
             date.and_hms_opt(4, 34, 56).unwrap().into(),
             "timestamp",

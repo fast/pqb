@@ -329,21 +329,53 @@ pub(crate) fn write_value<W: SqlWriter>(w: &mut W, value: &Value) {
         #[cfg(feature = "with-uuid")]
         Value::Uuid(Some(u)) => w.push_fmt(format_args!("'{u}'")),
         #[cfg(feature = "with-chrono")]
-        Value::Date(Some(v)) => w.push_fmt(format_args!("'{}'::date", v.format("%Y-%m-%d"))),
+        Value::Date(Some(v)) => write_calendar_value(w, *v, None, false),
         #[cfg(feature = "with-chrono")]
         Value::Time(Some(v)) => w.push_fmt(format_args!("'{}'::time", v.format("%H:%M:%S%.f"))),
         #[cfg(feature = "with-chrono")]
-        Value::Timestamp(Some(v)) => w.push_fmt(format_args!(
-            "'{}'::timestamp",
-            v.format("%Y-%m-%d %H:%M:%S%.f")
-        )),
+        Value::Timestamp(Some(v)) => write_calendar_value(w, v.date(), Some(v.time()), false),
         #[cfg(feature = "with-chrono")]
         Value::TimestampWithTimeZone(Some(v)) => {
-            w.push_fmt(format_args!("'{}'::timestamptz", v.to_rfc3339()))
+            write_calendar_value(w, v.date_naive(), Some(v.time()), true)
         }
         #[cfg(feature = "with-rust_decimal")]
         Value::Decimal(Some(v)) => w.push_fmt(format_args!("{v}")),
     }
+}
+
+#[cfg(feature = "with-chrono")]
+fn write_calendar_value<W: SqlWriter>(
+    w: &mut W,
+    date: NaiveDate,
+    time: Option<NaiveTime>,
+    timezone: bool,
+) {
+    use chrono::Datelike;
+
+    // PostgreSQL has no year zero and rejects chrono's leading '+' for years beyond 9999.
+    let (ce, year) = date.year_ce();
+    w.push_fmt(format_args!(
+        "'{year:04}-{:02}-{:02}",
+        date.month(),
+        date.day()
+    ));
+    if let Some(time) = time {
+        w.push_char(if timezone { 'T' } else { ' ' });
+        w.push_fmt(format_args!("{}", time.format("%H:%M:%S%.f")));
+    }
+    if timezone {
+        w.push_str("+00:00");
+    }
+    if !ce {
+        w.push_str(" BC");
+    }
+    w.push_str(if timezone {
+        "'::timestamptz"
+    } else if time.is_some() {
+        "'::timestamp"
+    } else {
+        "'::date"
+    });
 }
 
 fn write_array_value<W: SqlWriter>(w: &mut W, values: &[Value]) {
