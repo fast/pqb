@@ -125,7 +125,7 @@ let rows = sqlx::query_with(sql, args).fetch_all(connection).await?;
 | `Option<T>` | The same SQL type, with `None` representing NULL |
 | Enabled JSON, UUID, Chrono, Decimal types | Corresponding PostgreSQL types |
 
-Choose the Rust width that matches the SQL column, particularly with postgres's checked binary encoder. PostgreSQL has no unsigned integer types. Both adapters check conversions instead of truncating. Fixed-offset timestamps are normalized to UTC, preserving the instant. For standalone parameters whose type PostgreSQL cannot infer, use `Expr::value(value).cast_as("bigint")`, for example.
+Choose the Rust width that matches the SQL column, particularly with postgres's checked binary encoder. PostgreSQL has no unsigned integer types. Both adapters check conversions instead of truncating. Fixed-offset timestamps are normalized to UTC, preserving the instant. `postgres_typed_params()` and `into_sqlx()` supply parameter types from Rust values; use `Expr::value(value).cast_as("bigint")` when an SQL conversion is intended.
 
 Use typed arrays when empty or NULL arrays are possible:
 
@@ -335,7 +335,7 @@ let expr = SqlFragment::new("COALESCE(")
 assert_eq!(Select::new().expr(expr).to_values().sql(), "SELECT COALESCE(\"name\", $1)");
 ```
 
-Builders reject basic structural mistakes such as missing mutation targets or inconsistent insert rows. `Insert::try_values` returns an error for dynamic row input; convenience setters and rendering may panic on programmer errors. This is not a complete SQL validator: schema-dependent names, expression types, grouping rules, supported function modifiers and version-specific syntax are checked by PostgreSQL. Expressions are dynamically typed, not a compile-time schema DSL.
+Builders reject structural mistakes such as missing targets, incompatible projection widths, unsupported built-in function modifiers and conflicting statement options. Checks at rendering use the final builder state, so changing setter order cannot bypass them. `Insert::try_values` returns an error for dynamic row input; convenience setters and rendering may panic on programmer errors. PostgreSQL still checks schema-dependent names, expression types, grouping rules, custom functions and version-specific syntax. Expressions are dynamically typed, not a compile-time schema DSL.
 
 The test suite parses generated SQL with PostgreSQL's parser. CI also executes representative relational workflows and parameter roundtrips through both drivers on PostgreSQL 14, 15 and 18. MERGE is exercised on 15 and 18, with RETURNING and BY SOURCE on 18. Version-specific features require their corresponding server: negative numeric scales and scales exceeding precision require PostgreSQL 15+, and virtual generated columns require PostgreSQL 18+.
 
