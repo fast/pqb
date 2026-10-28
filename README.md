@@ -168,6 +168,8 @@ let query = Select::new().expr(matrix).expr(shifted).to_values();
 | PostgreSQL operations | COPY text/CSV/binary, row locks, `NOWAIT`, `SKIP LOCKED`, table sampling, `EXPLAIN` options |
 | DDL | Create/alter/drop tables, identity/generated columns, relational constraints, create/drop indexes and schemas, RANGE/LIST/HASH partition management |
 
+Joins and TABLESAMPLE attach to the most recently added FROM item. Add that item before calling join or sampling methods; appending another FROM item starts a separate join chain.
+
 ### MERGE
 
 `Merge` (PostgreSQL 15+) evaluates ordered `MergeWhen` clauses against a source table or subquery. `MergeAction` supports update, delete, insert, default values and do nothing. Conditional clauses use `.and_where(...)`; an unconditional clause must come last for its match kind. RETURNING, MERGE in a CTE and `not_matched_by_source` require PostgreSQL 17+. WITH RECURSIVE is not supported for MERGE.

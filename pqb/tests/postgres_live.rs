@@ -798,3 +798,60 @@ async fn postgres_routes_and_manages_partitions() -> Result<(), Error> {
     connection.await??;
     Ok(())
 }
+
+#[tokio::test]
+#[ignore = "requires PQB_TEST_DATABASE_URL"]
+async fn postgres_preserves_from_and_join_scope() -> Result<(), Error> {
+    use pqb::query::TableSample;
+    let (client, connection) =
+        tokio_postgres::connect(&database_url(), tokio_postgres::NoTls).await?;
+    let connection = tokio::spawn(connection);
+    client
+        .batch_execute(
+            &CreateTable::new()
+                .temporary()
+                .table("join_scope")
+                .column(ColumnDef::new("id").int())
+                .to_sql(),
+        )
+        .await?;
+    client
+        .batch_execute(
+            &Insert::new()
+                .into_table("join_scope")
+                .values([1.into()])
+                .to_sql(),
+        )
+        .await?;
+    let source = |id| Select::new().expr_as(Expr::value(id).cast_as("integer"), "id");
+    let query = Select::new()
+        .columns([("a", "id"), ("b", "id"), ("c", "id"), ("d", "id")])
+        .from_as("join_scope", "a")
+        .table_sample(TableSample::system())
+        .inner_join(
+            TableRef::subquery(source(1), "b"),
+            Expr::column(("a", "id")).eq(Expr::column(("b", "id"))),
+        )
+        .from_subquery(source(2), "c")
+        .left_join(
+            TableRef::subquery(source(3), "d"),
+            Expr::column(("c", "id")).lt(Expr::column(("d", "id"))),
+        );
+    let bound = query.to_values();
+    let row = client
+        .query_one(bound.sql(), &bound.postgres_params())
+        .await?;
+    assert_eq!(
+        (
+            row.get::<_, i32>(0),
+            row.get::<_, i32>(1),
+            row.get::<_, i32>(2),
+            row.get::<_, i32>(3)
+        ),
+        (1, 1, 2, 3)
+    );
+    client.query_one(&query.to_sql(), &[]).await?;
+    drop(client);
+    connection.await??;
+    Ok(())
+}
