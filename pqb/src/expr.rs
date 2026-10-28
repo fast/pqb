@@ -93,6 +93,19 @@ impl Expr {
         Expr::Column(col.into_column_ref())
     }
 
+    /// Reference a one-based output column position in ORDER BY, GROUP BY or DISTINCT ON.
+    ///
+    /// The position is always rendered inline, including in parameterized queries. Panics if the
+    /// position is zero or exceeds PostgreSQL's int4 range. Use only as a whole clause expression;
+    /// positions inside arithmetic, aggregates or window definitions are ordinary integer values.
+    pub fn output_position(position: u32) -> Self {
+        assert!(
+            position > 0 && position <= i32::MAX as u32,
+            "output position must be a positive int4"
+        );
+        Self::custom(position.to_string())
+    }
+
     /// Express a function call with custom name and arguments.
     pub fn function<N, T, I>(name: N, args: I) -> Self
     where
@@ -658,6 +671,19 @@ pub enum BinaryOp {
 }
 
 impl Expr {
+    pub(crate) fn validate_sort_group_expr(&self) {
+        assert!(
+            !matches!(
+                self,
+                Self::Value(_)
+                    | Self::Keyword(
+                        Keyword::Null | Keyword::True | Keyword::False | Keyword::Default
+                    )
+            ),
+            "bare values are ambiguous in ORDER BY, GROUP BY and DISTINCT ON; use Expr::output_position or cast the value"
+        );
+    }
+
     pub(crate) fn from_conditions(conditions: Vec<Expr>) -> Option<Expr> {
         conditions
             .into_iter()

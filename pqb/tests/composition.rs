@@ -141,6 +141,26 @@ fn joined_mutations_and_aliased_returning() {
 }
 
 #[test]
+fn grouping_requires_explicit_literal_intent() {
+    for expr in [Expr::value(1), Expr::value("name"), Expr::null()] {
+        assert!(std::panic::catch_unwind(|| Order::expr(expr.clone())).is_err());
+        assert!(std::panic::catch_unwind(|| Select::new().group_by_exprs([expr.clone()])).is_err());
+        assert!(std::panic::catch_unwind(|| Select::new().distinct_on([expr.clone()])).is_err());
+    }
+    let query = Select::new()
+        .expr(7)
+        .group_by_exprs([Expr::value(1).cast_as("integer")])
+        .order_by([Order::position(1)]);
+    query.to_sql().validate();
+    let bound = query.to_values();
+    assert_eq!(
+        bound.sql(),
+        "SELECT $1 GROUP BY CAST($2 AS integer) ORDER BY 1 ASC"
+    );
+    assert_eq!(bound.values(), &[7.into(), 1.into()]);
+}
+
+#[test]
 fn composed_queries_reject_incompatible_shapes_and_clauses() {
     use pqb::query::Copy;
     use pqb::query::Explain;
@@ -158,7 +178,6 @@ fn composed_queries_reject_incompatible_shapes_and_clauses() {
             .to_sql())
         .is_err()
     );
-    assert!(std::panic::catch_unwind(|| Order::expr(1)).is_err());
     assert!(
         std::panic::catch_unwind(|| Select::new()
             .column("id")

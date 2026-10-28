@@ -102,6 +102,8 @@ impl Select {
     /// Keep the first row of each group of expressions (DISTINCT ON).
     ///
     /// Start ORDER BY with these expressions to choose which row is kept.
+    /// Bare literal values are rejected; use [`Expr::output_position`] for an output column number
+    /// or cast a value explicitly to use it as a constant expression.
     pub fn distinct_on<I, E>(mut self, expressions: I) -> Self
     where
         I: IntoIterator<Item = E>,
@@ -112,6 +114,9 @@ impl Select {
             !expressions.is_empty(),
             "DISTINCT ON requires expressions; use distinct for all columns"
         );
+        for expr in &expressions {
+            expr.validate_sort_group_expr();
+        }
         self.distinct = Some(expressions);
         self
     }
@@ -387,13 +392,18 @@ impl Select {
     }
 
     /// GROUP BY expressions.
+    ///
+    /// Bare literal values are rejected; use [`Expr::output_position`] for an output column number
+    /// or cast a value explicitly to use it as a constant expression.
     pub fn group_by_exprs<T, I>(mut self, exprs: I) -> Self
     where
         T: Into<Expr>,
         I: IntoIterator<Item = T>,
     {
         for expr in exprs {
-            self.groups.push(expr.into());
+            let expr = expr.into();
+            expr.validate_sort_group_expr();
+            self.groups.push(expr);
         }
         self
     }

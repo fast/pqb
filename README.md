@@ -107,7 +107,7 @@ let query = Select::new().expr(matrix).expr(shifted).to_values();
 | PostgreSQL operations | COPY text/CSV/binary, row locks, `NOWAIT`, `SKIP LOCKED`, table sampling, `EXPLAIN` options |
 | DDL | Create/alter/drop tables, identity/generated columns, relational constraints, create/drop indexes and schemas, RANGE/LIST/HASH partition management |
 
-Use `Order::position(1)` to sort by an output column number; literal values passed to `Order::expr` are rejected because PostgreSQL treats them differently from bind parameters. Set operations accept output column names and positions in ORDER BY; wrap the result in `from_subquery` before ordering by an expression.
+Use `Order::position(1)` to sort by an output column number, or `Expr::output_position(1)` in `group_by_exprs` and `distinct_on`. These positions stay inline in parameterized queries. Bare literal values are rejected in these clauses because PostgreSQL interprets them differently from bind parameters; cast a value explicitly when a constant expression is intended. Positions refer to output columns only in these SELECT clauses, not inside aggregates or window definitions. Set operations accept output column names and positions in ORDER BY; wrap the result in `from_subquery` before ordering by an expression.
 
 Joins and TABLESAMPLE attach to the most recently added FROM item. Add that item before calling join or sampling methods; appending another FROM item starts a separate join chain.
 

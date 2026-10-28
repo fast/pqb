@@ -36,6 +36,29 @@ use crate::psql;
 
 #[test]
 #[ignore = "requires psql and PQB_TEST_DATABASE_URL"]
+fn output_positions_preserve_grouping_when_parameterized() {
+    let rows = Select::new()
+        .expr_as(1, "n")
+        .union_all(Select::new().expr(2));
+    let query = Select::new().column("n").from_subquery(rows, "input");
+    for query in [
+        query.clone().group_by_exprs([Expr::output_position(1)]),
+        query.distinct_on([Expr::output_position(1)]),
+    ] {
+        let query = query.order_by([Order::position(1)]);
+        let bound = query.to_values();
+        assert_eq!(bound.values(), &[1.into(), 2.into()]);
+        let script = format!(
+            "{};\nPREPARE grouped(integer, integer) AS {};\nEXECUTE grouped(1, 2);\n",
+            query.to_sql(),
+            bound.sql(),
+        );
+        assert_eq!(psql(&script), "1\n2\n1\n2");
+    }
+}
+
+#[test]
+#[ignore = "requires psql and PQB_TEST_DATABASE_URL"]
 fn queries_copy_and_partitions_execute() {
     let table = CreateTable::new()
         .temporary()

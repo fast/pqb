@@ -51,24 +51,15 @@ impl Order {
     }
 
     /// Order by an expression in ascending order.
+    ///
+    /// Bare literal values are rejected; use [`Self::position`] for an output column number or
+    /// cast a value explicitly to order by a constant expression.
     pub fn expr<E>(expr: E) -> Self
     where
         E: Into<Expr>,
     {
         let expr = expr.into();
-        assert!(
-            !matches!(
-                expr,
-                Expr::Value(_)
-                    | Expr::Keyword(
-                        crate::expr::Keyword::Null
-                            | crate::expr::Keyword::True
-                            | crate::expr::Keyword::False
-                            | crate::expr::Keyword::Default
-                    )
-            ),
-            "ORDER BY requires an expression or column; use Order::position for an output position"
-        );
+        expr.validate_sort_group_expr();
         Self {
             expr,
             direction: SortDirection::Asc,
@@ -76,13 +67,10 @@ impl Order {
         }
     }
 
-    /// Order by a one-based output column position, rendered inline even in bound queries.
+    /// Order a SELECT result by a one-based output column position, rendered inline even in bound
+    /// queries. Within aggregates and window definitions, PostgreSQL treats it as a constant.
     pub fn position(position: u32) -> Self {
-        assert!(
-            position > 0 && position <= i32::MAX as u32,
-            "ORDER BY position must be a positive int4"
-        );
-        Self::expr(Expr::custom(position.to_string()))
+        Self::expr(Expr::output_position(position))
     }
 
     pub(super) fn valid_for_set(&self) -> bool {
