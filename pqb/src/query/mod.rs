@@ -23,6 +23,7 @@ mod returning;
 mod select;
 mod statement;
 mod update;
+mod window;
 mod with;
 
 pub use self::conflict::*;
@@ -34,4 +35,5 @@ pub use self::returning::*;
 pub use self::select::*;
 pub use self::statement::*;
 pub use self::update::*;
+pub use self::window::*;
 pub use self::with::*;

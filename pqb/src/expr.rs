@@ -33,6 +33,11 @@ use crate::value::Value;
 use crate::value::write_value;
 use crate::writer::SqlWriter;
 
+mod case;
+mod fragment;
+pub use case::Case;
+pub use fragment::SqlFragment;
+
 /// SQL keywords.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[non_exhaustive]
@@ -40,6 +45,9 @@ use crate::writer::SqlWriter;
 pub enum Keyword {
     Null,
     CurrentTimestamp,
+    True,
+    False,
+    Default,
 }
 
 /// An arbitrary, dynamically-typed SQL expression.
@@ -57,6 +65,14 @@ pub enum Expr {
     FunctionCall(FunctionCall),
     SubQuery(Option<SubQueryOp>, Box<Select>),
     Custom(Cow<'static, str>),
+    Case(Case),
+    Fragment(SqlFragment),
+    Between {
+        expr: Box<Expr>,
+        low: Box<Expr>,
+        high: Box<Expr>,
+        negated: bool,
+    },
 }
 
 /// # Expression constructors
@@ -100,7 +116,9 @@ impl Expr {
         Expr::Tuple(exprs.into_iter().collect())
     }
 
-    /// Express a custom SQL expression.
+    /// Express trusted SQL verbatim. Never pass user input here.
+    ///
+    /// Use [`SqlFragment`] to interleave trusted syntax with bound expressions.
     pub fn custom<T>(expr: T) -> Self
     where
         T: Into<Cow<'static, str>>,
@@ -111,6 +129,57 @@ impl Expr {
     /// Keyword `CURRENT_TIMESTAMP`.
     pub fn current_timestamp() -> Self {
         Expr::Keyword(Keyword::CurrentTimestamp)
+    }
+
+    /// SQL NULL, without adding a bind parameter.
+    pub fn null() -> Self {
+        Self::Keyword(Keyword::Null)
+    }
+
+    /// SQL DEFAULT, for INSERT values and UPDATE assignments.
+    pub fn default_value() -> Self {
+        Self::Keyword(Keyword::Default)
+    }
+
+    /// Combine conditions with AND. An empty collection yields TRUE.
+    pub fn all<I, E>(conditions: I) -> Self
+    where
+        I: IntoIterator<Item = E>,
+        E: Into<Expr>,
+    {
+        conditions
+            .into_iter()
+            .map(Into::into)
+            .reduce(Expr::and)
+            .unwrap_or(Self::Keyword(Keyword::True))
+    }
+
+    /// Combine conditions with OR. An empty collection yields FALSE.
+    pub fn any<I, E>(conditions: I) -> Self
+    where
+        I: IntoIterator<Item = E>,
+        E: Into<Expr>,
+    {
+        conditions
+            .into_iter()
+            .map(Into::into)
+            .reduce(Expr::or)
+            .unwrap_or(Self::Keyword(Keyword::False))
+    }
+
+    /// A scalar subquery, which must return at most one row and one column.
+    pub fn subquery(query: Select) -> Self {
+        Self::SubQuery(None, Box::new(query))
+    }
+
+    /// Test whether a subquery returns any rows.
+    pub fn exists(query: Select) -> Self {
+        Self::SubQuery(Some(SubQueryOp::Exists), Box::new(query))
+    }
+
+    /// Test whether a subquery returns no rows.
+    pub fn not_exists(query: Select) -> Self {
+        Self::exists(query).not()
     }
 }
 
@@ -157,10 +226,12 @@ impl Expr {
         A: Into<Expr>,
         B: Into<Expr>,
     {
-        self.binary(
-            BinaryOp::Between,
-            Expr::Binary(Box::new(a.into()), BinaryOp::And, Box::new(b.into())),
-        )
+        Self::Between {
+            expr: Box::new(self),
+            low: Box::new(a.into()),
+            high: Box::new(b.into()),
+            negated: false,
+        }
     }
 
     /// Check if the expression is not between two values.
@@ -169,10 +240,12 @@ impl Expr {
         A: Into<Expr>,
         B: Into<Expr>,
     {
-        self.binary(
-            BinaryOp::NotBetween,
-            Expr::Binary(Box::new(a.into()), BinaryOp::And, Box::new(b.into())),
-        )
+        Self::Between {
+            expr: Box::new(self),
+            low: Box::new(a.into()),
+            high: Box::new(b.into()),
+            negated: true,
+        }
     }
 
     /// Pattern matching with LIKE.
@@ -181,6 +254,56 @@ impl Expr {
         R: Into<Expr>,
     {
         self.binary(BinaryOp::Like, pattern)
+    }
+
+    /// Case-insensitive pattern matching with ILIKE.
+    pub fn ilike(self, pattern: impl Into<Expr>) -> Self {
+        self.binary(BinaryOp::ILike, pattern)
+    }
+
+    /// Negated pattern matching with NOT LIKE.
+    pub fn not_like(self, pattern: impl Into<Expr>) -> Self {
+        self.binary(BinaryOp::NotLike, pattern)
+    }
+
+    /// Negated case-insensitive pattern matching with NOT ILIKE.
+    pub fn not_ilike(self, pattern: impl Into<Expr>) -> Self {
+        self.binary(BinaryOp::NotILike, pattern)
+    }
+
+    /// Extract a JSON field or array element as JSON (->).
+    pub fn json_get(self, key: impl Into<Expr>) -> Self {
+        self.binary(BinaryOp::JsonGet, key)
+    }
+
+    /// Extract a JSON field or array element as text (->>).
+    pub fn json_get_text(self, key: impl Into<Expr>) -> Self {
+        self.binary(BinaryOp::JsonGetText, key)
+    }
+
+    /// Extract a JSON path (#>), using a text array expression.
+    pub fn json_path(self, path: impl Into<Expr>) -> Self {
+        self.binary(BinaryOp::JsonPath, path)
+    }
+
+    /// Extract a JSON path as text (#>>), using a text array expression.
+    pub fn json_path_text(self, path: impl Into<Expr>) -> Self {
+        self.binary(BinaryOp::JsonPathText, path)
+    }
+
+    /// Test whether a JSONB object has a key (?).
+    pub fn json_has_key(self, key: impl Into<Expr>) -> Self {
+        self.binary(BinaryOp::JsonHasKey, key)
+    }
+
+    /// Concatenate strings, arrays or JSONB values (||).
+    pub fn concat(self, right: impl Into<Expr>) -> Self {
+        self.binary(BinaryOp::Concat, right)
+    }
+
+    /// SQL remainder (%).
+    pub fn modulo(self, right: impl Into<Expr>) -> Self {
+        self.binary(BinaryOp::Mod, right)
     }
 
     /// Add a value.
@@ -424,6 +547,11 @@ impl Expr {
         self.binary(BinaryOp::In, Expr::SubQuery(None, Box::new(query)))
     }
 
+    /// Express NOT IN with a subquery.
+    pub fn not_in_subquery(self, query: Select) -> Expr {
+        self.binary(BinaryOp::NotIn, Expr::subquery(query))
+    }
+
     /// Express a `IN` expression with tuple values.
     pub fn in_tuples<T, I>(self, tuples: I) -> Expr
     where
@@ -494,6 +622,14 @@ pub enum BinaryOp {
     NotBetween,
     Like,
     NotLike,
+    ILike,
+    NotILike,
+    JsonGet,
+    JsonGetText,
+    JsonPath,
+    JsonPathText,
+    JsonHasKey,
+    Concat,
     Is,
     IsNot,
     IsDistinctFrom,
@@ -551,6 +687,9 @@ pub(crate) fn write_expr<W: SqlWriter>(w: &mut W, expr: &Expr) {
         Expr::Keyword(keyword) => w.push_str(match keyword {
             Keyword::Null => "NULL",
             Keyword::CurrentTimestamp => "CURRENT_TIMESTAMP",
+            Keyword::True => "TRUE",
+            Keyword::False => "FALSE",
+            Keyword::Default => "DEFAULT",
         }),
         Expr::Tuple(exprs) => write_tuple(w, exprs),
         Expr::Value(value) => w.push_param(value.clone()),
@@ -581,6 +720,35 @@ pub(crate) fn write_expr<W: SqlWriter>(w: &mut W, expr: &Expr) {
             w.push_char(')');
         }
         Expr::Custom(expr) => w.push_str(expr),
+        Expr::Case(case) => case::write_case(w, case),
+        Expr::Fragment(fragment) => fragment::write_fragment(w, fragment),
+        Expr::Between {
+            expr,
+            low,
+            high,
+            negated,
+        } => {
+            write_operand(w, expr);
+            w.push_str(if *negated {
+                " NOT BETWEEN "
+            } else {
+                " BETWEEN "
+            });
+            write_operand(w, low);
+            w.push_str(" AND ");
+            write_operand(w, high);
+        }
+    }
+}
+
+fn write_operand<W: SqlWriter>(w: &mut W, expr: &Expr) {
+    let parens = !well_known_no_parentheses(expr);
+    if parens {
+        w.push_char('(');
+    }
+    write_expr(w, expr);
+    if parens {
+        w.push_char(')');
     }
 }
 
@@ -668,6 +836,14 @@ fn write_binary_op<W: SqlWriter>(w: &mut W, op: &BinaryOp) {
         BinaryOp::As => "AS",
         BinaryOp::Like => "LIKE",
         BinaryOp::NotLike => "NOT LIKE",
+        BinaryOp::ILike => "ILIKE",
+        BinaryOp::NotILike => "NOT ILIKE",
+        BinaryOp::JsonGet => "->",
+        BinaryOp::JsonGetText => "->>",
+        BinaryOp::JsonPath => "#>",
+        BinaryOp::JsonPathText => "#>>",
+        BinaryOp::JsonHasKey => "?",
+        BinaryOp::Concat => "||",
         BinaryOp::Is => "IS",
         BinaryOp::IsNot => "IS NOT",
         BinaryOp::IsDistinctFrom => "IS DISTINCT FROM",
@@ -740,6 +916,7 @@ fn well_known_no_parentheses(expr: &Expr) -> bool {
             | Expr::Keyword(_)
             | Expr::FunctionCall(_)
             | Expr::SubQuery(_, _)
+            | Expr::Case(_)
     )
 }
 
@@ -803,7 +980,9 @@ impl Operator {
     fn is_like(&self) -> bool {
         matches!(
             self,
-            Operator::Binary(BinaryOp::Like) | Operator::Binary(BinaryOp::NotLike)
+            Operator::Binary(
+                BinaryOp::Like | BinaryOp::NotLike | BinaryOp::ILike | BinaryOp::NotILike
+            )
         )
     }
 

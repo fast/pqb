@@ -42,9 +42,42 @@ enum Func {
 pub struct FunctionCall {
     func: Func,
     args: Vec<Expr>,
+    distinct: bool,
+    orders: Vec<crate::query::Order>,
+    filter: Option<Box<Expr>>,
+    window: Option<crate::query::Window>,
 }
 
 impl FunctionCall {
+    /// Deduplicate aggregate arguments, as in COUNT(DISTINCT column).
+    pub fn distinct(mut self) -> Self {
+        self.distinct = true;
+        self
+    }
+
+    /// Order aggregate input, as in ARRAY_AGG(value ORDER BY timestamp).
+    pub fn order_by(mut self, orders: impl IntoIterator<Item = crate::query::Order>) -> Self {
+        self.orders.extend(orders);
+        self
+    }
+
+    /// Include only rows satisfying this aggregate FILTER condition.
+    pub fn filter(mut self, condition: impl Into<Expr>) -> Self {
+        self.filter = Some(Box::new(condition.into()));
+        self
+    }
+
+    /// Evaluate this function over a window.
+    pub fn over(mut self, window: crate::query::Window) -> Self {
+        self.window = Some(window);
+        self
+    }
+
+    /// Create ROW_NUMBER() for use with OVER.
+    pub fn row_number() -> Self {
+        Self::custom("ROW_NUMBER", std::iter::empty::<Expr>())
+    }
+
     /// Create a new MAX function call.
     pub fn max<T>(expr: T) -> Self
     where
@@ -53,6 +86,10 @@ impl FunctionCall {
         Self {
             func: Func::Max,
             args: vec![expr.into()],
+            distinct: false,
+            orders: vec![],
+            filter: None,
+            window: None,
         }
     }
 
@@ -64,6 +101,10 @@ impl FunctionCall {
         Self {
             func: Func::Min,
             args: vec![expr.into()],
+            distinct: false,
+            orders: vec![],
+            filter: None,
+            window: None,
         }
     }
 
@@ -75,6 +116,10 @@ impl FunctionCall {
         Self {
             func: Func::Sum,
             args: vec![expr.into()],
+            distinct: false,
+            orders: vec![],
+            filter: None,
+            window: None,
         }
     }
 
@@ -86,6 +131,10 @@ impl FunctionCall {
         Self {
             func: Func::Avg,
             args: vec![expr.into()],
+            distinct: false,
+            orders: vec![],
+            filter: None,
+            window: None,
         }
     }
 
@@ -97,6 +146,10 @@ impl FunctionCall {
         Self {
             func: Func::Count,
             args: vec![expr.into()],
+            distinct: false,
+            orders: vec![],
+            filter: None,
+            window: None,
         }
     }
 
@@ -105,6 +158,10 @@ impl FunctionCall {
         Self {
             func: Func::Count,
             args: vec![Expr::Asterisk],
+            distinct: false,
+            orders: vec![],
+            filter: None,
+            window: None,
         }
     }
 
@@ -117,6 +174,10 @@ impl FunctionCall {
         Self {
             func: Func::Coalesce,
             args: vec![a.into(), b.into()],
+            distinct: false,
+            orders: vec![],
+            filter: None,
+            window: None,
         }
     }
 
@@ -128,6 +189,10 @@ impl FunctionCall {
         FunctionCall {
             func: Func::Lower,
             args: vec![expr.into()],
+            distinct: false,
+            orders: vec![],
+            filter: None,
+            window: None,
         }
     }
 
@@ -139,6 +204,10 @@ impl FunctionCall {
         FunctionCall {
             func: Func::Upper,
             args: vec![expr.into()],
+            distinct: false,
+            orders: vec![],
+            filter: None,
+            window: None,
         }
     }
 
@@ -152,6 +221,10 @@ impl FunctionCall {
         FunctionCall {
             func: Func::Cast,
             args: vec![expr.binary(BinaryOp::As, Expr::custom(iden.into_iden().into_inner()))],
+            distinct: false,
+            orders: vec![],
+            filter: None,
+            window: None,
         }
     }
 
@@ -165,6 +238,10 @@ impl FunctionCall {
         Self {
             func: Func::Custom(name.into()),
             args: args.into_iter().map(|arg| arg.into()).collect(),
+            distinct: false,
+            orders: vec![],
+            filter: None,
+            window: None,
         }
     }
 }
@@ -189,13 +266,33 @@ pub(crate) fn write_function_call<W: SqlWriter>(w: &mut W, call: &FunctionCall) 
         Func::Custom(name) => w.push_str(name),
     }
     w.push_char('(');
+    if call.distinct {
+        w.push_str("DISTINCT ");
+    }
     for (i, arg) in call.args.iter().enumerate() {
         if i > 0 {
             w.push_str(", ");
         }
         write_expr(w, arg);
     }
+    if !call.orders.is_empty() {
+        w.push_str(" ORDER BY ");
+        for (i, order) in call.orders.iter().enumerate() {
+            if i > 0 {
+                w.push_str(", ");
+            }
+            crate::query::write_order(w, order);
+        }
+    }
     w.push_char(')');
+    if let Some(filter) = &call.filter {
+        w.push_str(" FILTER (WHERE ");
+        write_expr(w, filter);
+        w.push_char(')');
+    }
+    if let Some(window) = &call.window {
+        crate::query::write_window(w, window);
+    }
 }
 
 /// Express a column reference for use in aggregate functions.
