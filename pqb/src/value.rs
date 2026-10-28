@@ -114,7 +114,9 @@ impl Value {
 
     /// Create a typed PostgreSQL array, including empty arrays and arrays containing nulls.
     ///
-    /// Drivers reject elements whose types do not match the declared element type.
+    /// Stores the declared type without validating elements. Inline SQL casts the array to that
+    /// type; applications must encode collected parameters accordingly. Use [`ArrayValue::new`]
+    /// to validate the shape and element types before constructing an array.
     pub fn typed_array<I, V>(ty: ArrayType, values: I) -> Self
     where
         I: IntoIterator<Item = V>,
@@ -206,25 +208,19 @@ impl Nullable for &[u8] {
     }
 }
 
-#[allow(unused_macros)]
-macro_rules! type_to_box_value {
-    ( $type: ty, $name: ident, $col_type: expr ) => {
-        impl From<$type> for Value {
-            fn from(x: $type) -> Value {
-                Value::$name(Some(Box::new(x)))
-            }
-        }
-
-        impl Nullable for $type {
-            fn null() -> Value {
-                Value::$name(None)
-            }
-        }
-    };
+#[cfg(feature = "with-json")]
+impl From<Json> for Value {
+    fn from(value: Json) -> Self {
+        Self::Json(Some(Box::new(value)))
+    }
 }
 
 #[cfg(feature = "with-json")]
-type_to_box_value!(Json, Json, Json);
+impl Nullable for Json {
+    fn null() -> Value {
+        Value::Json(None)
+    }
+}
 
 impl From<&str> for Value {
     fn from(x: &str) -> Value {

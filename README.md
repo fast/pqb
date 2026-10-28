@@ -77,7 +77,7 @@ let empty = Value::typed_array(ArrayType::Int, Vec::<i32>::new());
 let absent = Value::null_array(ArrayType::Int);
 ```
 
-`Value::typed_array` and `Value::null_array` preserve an explicit element type. `Value::array` stores elements without a declared type, so empty or NULL arrays need a SQL type context when rendered inline.
+`Value::typed_array` and `Value::null_array` preserve an explicit element type. `typed_array` records the type without validating elements; inline SQL casts the array, while the application encodes collected parameters. Use `ArrayValue::new` below when shape and element validation are needed. `Value::array` stores elements without a declared type, so empty or NULL arrays need a SQL type context when rendered inline.
 
 For multiple dimensions, provide lengths and flat elements in row-major order (the last subscript varies fastest). Use `(length, lower_bound)` pairs when subscripts should start somewhere other than 1:
 
@@ -94,7 +94,6 @@ let query = Select::new().expr(matrix).expr(shifted).to_values();
 `ArrayValue::new` returns `ArrayError` for mismatched shape, incompatible elements, overflowing bounds or more than six dimensions. Zero-length axes become PostgreSQL's canonical empty array; use `Value::null_array` for a NULL array. Inline SQL preserves dimensions and lower bounds too.
 
 ## Compose queries
-
 
 | Area | Supported builders |
 | --- | --- |
@@ -174,9 +173,6 @@ let attach = AlterTable::new().table("events")
 Partition operations inline literals, like other DDL. Attach/detach must be separate ALTER TABLE commands. `detach_partition_concurrently` (PostgreSQL 14+) must run outside a transaction block and requires no default partition; `finalize_detach_partition` completes an interrupted detach. PostgreSQL validates existing rows, overlapping bounds and key types. Detaching preserves the child table and its data; use `DropTable` to remove it explicitly.
 
 ### Dynamic predicates
-
-
-
 
 `Expr::all` combines conditions with AND; `Expr::any` uses OR. Empty collections yield TRUE and FALSE respectively. Empty `IN` and `NOT IN` lists also become boolean constants without allocating parameters. Conditional Rust code can build the list before passing it to PQB.
 
