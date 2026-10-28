@@ -30,8 +30,12 @@ rust-version.workspace = true
 [features]
 with-json = ["dep:serde_json"]
 with-uuid = ["dep:uuid"]
+with-chrono = ["dep:chrono"]
+with-rust_decimal = ["dep:rust_decimal"]
 
 [dependencies]
+chrono = { version = "0.4", default-features = false, features = ["std"], optional = true }
+rust_decimal = { version = "1", default-features = false, features = ["std"], optional = true }
 serde_json = { version = "1", default-features = false, optional = true, features = [
   "std",
 ] }

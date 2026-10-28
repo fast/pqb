@@ -114,3 +114,38 @@ fn non_finite_floats_are_typed_literals() {
         "SELECT 'NaN'::double precision, 'Infinity'::double precision, '-Infinity'::real"
     );
 }
+
+#[test]
+fn binary_and_typed_array_literals() {
+    use pqb::value::ArrayType;
+    use pqb::value::Value;
+    let query = Select::new()
+        .expr(vec![0_u8, 39, 92, 255])
+        .expr(Value::typed_array(ArrayType::Int, Vec::<i32>::new()))
+        .expr(Value::null_array(ArrayType::Text));
+    assert_eq!(
+        query.to_sql().validate(),
+        "SELECT E'\\\\x00275cff'::bytea, '{}'::integer[], NULL::text[]"
+    );
+    let (sql, values) = query.to_values().into_parts();
+    assert_eq!(sql.validate(), "SELECT $1, $2, $3");
+    assert_eq!(values.len(), 3);
+}
+
+#[test]
+#[cfg(all(feature = "with-chrono", feature = "with-rust_decimal"))]
+fn temporal_and_decimal_literals() {
+    use pqb::value::DateTime;
+    use pqb::value::Decimal;
+    use pqb::value::NaiveDate;
+    let date = NaiveDate::from_ymd_opt(2026, 10, 28).unwrap();
+    let timestamp = DateTime::parse_from_rfc3339("2026-10-28T12:34:56+08:00").unwrap();
+    let query = Select::new()
+        .expr(date)
+        .expr(timestamp)
+        .expr(Decimal::new(12345, 2));
+    assert_eq!(
+        query.to_sql().validate(),
+        "SELECT '2026-10-28'::date, '2026-10-28T04:34:56+00:00'::timestamptz, 123.45"
+    );
+}

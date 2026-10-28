@@ -14,6 +14,20 @@
 
 //! Container for all SQL value types.
 
+#[cfg(feature = "with-chrono")]
+pub use chrono::DateTime;
+#[cfg(feature = "with-chrono")]
+pub use chrono::FixedOffset;
+#[cfg(feature = "with-chrono")]
+pub use chrono::NaiveDate;
+#[cfg(feature = "with-chrono")]
+pub use chrono::NaiveDateTime;
+#[cfg(feature = "with-chrono")]
+pub use chrono::NaiveTime;
+#[cfg(feature = "with-chrono")]
+pub use chrono::Utc;
+#[cfg(feature = "with-rust_decimal")]
+pub use rust_decimal::Decimal;
 #[cfg(feature = "with-json")]
 pub use serde_json::Value as Json;
 #[cfg(feature = "with-uuid")]
@@ -37,14 +51,42 @@ pub enum Value {
     Float(Option<f32>),
     Double(Option<f64>),
     String(Option<String>),
+    Bytes(Option<Vec<u8>>),
     Array(Option<Vec<Value>>),
+    TypedArray(ArrayType, Option<Vec<Value>>),
     #[cfg(feature = "with-json")]
     Json(Option<Box<Json>>),
     #[cfg(feature = "with-uuid")]
     Uuid(Option<Uuid>),
+    #[cfg(feature = "with-chrono")]
+    Date(Option<NaiveDate>),
+    #[cfg(feature = "with-chrono")]
+    Time(Option<NaiveTime>),
+    #[cfg(feature = "with-chrono")]
+    Timestamp(Option<NaiveDateTime>),
+    #[cfg(feature = "with-chrono")]
+    TimestampWithTimeZone(Option<DateTime<Utc>>),
+    #[cfg(feature = "with-rust_decimal")]
+    Decimal(Option<Decimal>),
 }
 
 impl Value {
+    /// Create a typed PostgreSQL array, including empty arrays and arrays containing nulls.
+    ///
+    /// Drivers reject elements whose types do not match the declared element type.
+    pub fn typed_array<I, V>(ty: ArrayType, values: I) -> Self
+    where
+        I: IntoIterator<Item = V>,
+        V: Into<Value>,
+    {
+        Self::TypedArray(ty, Some(values.into_iter().map(Into::into).collect()))
+    }
+
+    /// Create a NULL array with an explicit element type.
+    pub fn null_array(ty: ArrayType) -> Self {
+        Self::TypedArray(ty, None)
+    }
+
     /// Create a new array value.
     pub fn array<T, I>(values: I) -> Value
     where
@@ -83,8 +125,45 @@ type_to_value!(u64, BigUnsigned);
 type_to_value!(f32, Float);
 type_to_value!(f64, Double);
 type_to_value!(String, String);
+type_to_value!(Vec<u8>, Bytes);
 #[cfg(feature = "with-uuid")]
 type_to_value!(Uuid, Uuid);
+#[cfg(feature = "with-chrono")]
+type_to_value!(NaiveDate, Date);
+#[cfg(feature = "with-chrono")]
+type_to_value!(NaiveTime, Time);
+#[cfg(feature = "with-chrono")]
+type_to_value!(NaiveDateTime, Timestamp);
+#[cfg(feature = "with-chrono")]
+type_to_value!(DateTime<Utc>, TimestampWithTimeZone);
+#[cfg(feature = "with-rust_decimal")]
+type_to_value!(Decimal, Decimal);
+
+#[cfg(feature = "with-chrono")]
+impl From<DateTime<FixedOffset>> for Value {
+    fn from(value: DateTime<FixedOffset>) -> Self {
+        Self::TimestampWithTimeZone(Some(value.with_timezone(&Utc)))
+    }
+}
+
+#[cfg(feature = "with-chrono")]
+impl Nullable for DateTime<FixedOffset> {
+    fn null() -> Value {
+        Value::TimestampWithTimeZone(None)
+    }
+}
+
+impl From<&[u8]> for Value {
+    fn from(value: &[u8]) -> Self {
+        Self::Bytes(Some(value.to_vec()))
+    }
+}
+
+impl Nullable for &[u8] {
+    fn null() -> Value {
+        Value::Bytes(None)
+    }
+}
 
 #[allow(unused_macros)]
 macro_rules! type_to_box_value {
@@ -154,11 +233,19 @@ pub(crate) fn write_value<W: SqlWriter>(w: &mut W, value: &Value) {
         | Value::Float(None)
         | Value::Double(None)
         | Value::String(None)
+        | Value::Bytes(None)
         | Value::Array(None) => w.push_str("NULL"),
         #[cfg(feature = "with-json")]
         Value::Json(None) => w.push_str("NULL"),
         #[cfg(feature = "with-uuid")]
         Value::Uuid(None) => w.push_str("NULL"),
+        #[cfg(feature = "with-chrono")]
+        Value::Date(None)
+        | Value::Time(None)
+        | Value::Timestamp(None)
+        | Value::TimestampWithTimeZone(None) => w.push_str("NULL"),
+        #[cfg(feature = "with-rust_decimal")]
+        Value::Decimal(None) => w.push_str("NULL"),
 
         Value::Bool(Some(b)) => w.push_str(if *b { "TRUE" } else { "FALSE" }),
         Value::TinyInt(Some(i)) => w.push_fmt(format_args!("{i}")),
@@ -175,6 +262,23 @@ pub(crate) fn write_value<W: SqlWriter>(w: &mut W, value: &Value) {
         Value::Double(Some(f)) => w.push_fmt(format_args!("{f}")),
         Value::String(Some(s)) => write_string_value(w, s.as_str()),
         Value::Array(Some(a)) => write_array_value(w, a.as_slice()),
+        Value::TypedArray(ty, values) => {
+            if let Some(values) = values {
+                write_array_value(w, values);
+            } else {
+                w.push_str("NULL");
+            }
+            w.push_str("::");
+            w.push_str(ty.sql_name());
+            w.push_str("[]");
+        }
+        Value::Bytes(Some(bytes)) => {
+            w.push_str("E'\\\\x");
+            for byte in bytes {
+                w.push_fmt(format_args!("{byte:02x}"));
+            }
+            w.push_str("'::bytea");
+        }
         #[cfg(feature = "with-json")]
         Value::Json(Some(v)) => {
             let value = v.to_string();
@@ -182,6 +286,21 @@ pub(crate) fn write_value<W: SqlWriter>(w: &mut W, value: &Value) {
         }
         #[cfg(feature = "with-uuid")]
         Value::Uuid(Some(u)) => w.push_fmt(format_args!("'{u}'")),
+        #[cfg(feature = "with-chrono")]
+        Value::Date(Some(v)) => w.push_fmt(format_args!("'{}'::date", v.format("%Y-%m-%d"))),
+        #[cfg(feature = "with-chrono")]
+        Value::Time(Some(v)) => w.push_fmt(format_args!("'{}'::time", v.format("%H:%M:%S%.f"))),
+        #[cfg(feature = "with-chrono")]
+        Value::Timestamp(Some(v)) => w.push_fmt(format_args!(
+            "'{}'::timestamp",
+            v.format("%Y-%m-%d %H:%M:%S%.f")
+        )),
+        #[cfg(feature = "with-chrono")]
+        Value::TimestampWithTimeZone(Some(v)) => {
+            w.push_fmt(format_args!("'{}'::timestamptz", v.to_rfc3339()))
+        }
+        #[cfg(feature = "with-rust_decimal")]
+        Value::Decimal(Some(v)) => w.push_fmt(format_args!("{v}")),
     }
 }
 
@@ -258,4 +377,62 @@ fn should_escape(s: &str) -> bool {
         c if c.is_ascii_control() => true,
         _ => false,
     })
+}
+
+/// PostgreSQL element types for typed arrays.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
+#[expect(missing_docs)]
+pub enum ArrayType {
+    Bool,
+    SmallInt,
+    Int,
+    BigInt,
+    Float,
+    Double,
+    Text,
+    Bytes,
+    #[cfg(feature = "with-json")]
+    Json,
+    #[cfg(feature = "with-uuid")]
+    Uuid,
+    #[cfg(feature = "with-chrono")]
+    Date,
+    #[cfg(feature = "with-chrono")]
+    Time,
+    #[cfg(feature = "with-chrono")]
+    Timestamp,
+    #[cfg(feature = "with-chrono")]
+    TimestampWithTimeZone,
+    #[cfg(feature = "with-rust_decimal")]
+    Decimal,
+}
+
+impl ArrayType {
+    pub(crate) fn sql_name(self) -> &'static str {
+        match self {
+            Self::Bool => "boolean",
+            Self::SmallInt => "smallint",
+            Self::Int => "integer",
+            Self::BigInt => "bigint",
+            Self::Float => "real",
+            Self::Double => "double precision",
+            Self::Text => "text",
+            Self::Bytes => "bytea",
+            #[cfg(feature = "with-json")]
+            Self::Json => "jsonb",
+            #[cfg(feature = "with-uuid")]
+            Self::Uuid => "uuid",
+            #[cfg(feature = "with-chrono")]
+            Self::Date => "date",
+            #[cfg(feature = "with-chrono")]
+            Self::Time => "time",
+            #[cfg(feature = "with-chrono")]
+            Self::Timestamp => "timestamp",
+            #[cfg(feature = "with-chrono")]
+            Self::TimestampWithTimeZone => "timestamptz",
+            #[cfg(feature = "with-rust_decimal")]
+            Self::Decimal => "numeric",
+        }
+    }
 }

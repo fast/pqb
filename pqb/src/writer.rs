@@ -51,7 +51,6 @@ impl SqlWriter for String {
 pub struct SqlWriterValues {
     sql: String,
     values: Vec<Value>,
-    counter: usize,
 }
 
 impl SqlWriterValues {
@@ -60,13 +59,22 @@ impl SqlWriterValues {
         Self {
             sql: String::new(),
             values: Vec::new(),
-            counter: 0,
         }
     }
 
     /// Consume the writer and return the SQL string and collected values.
     pub fn into_parts(self) -> (String, Vec<Value>) {
         (self.sql, self.values)
+    }
+
+    /// Borrow the SQL text without consuming the bound query.
+    pub fn sql(&self) -> &str {
+        &self.sql
+    }
+
+    /// Borrow parameters in placeholder order.
+    pub fn values(&self) -> &[Value] {
+        &self.values
     }
 
     pub(crate) fn from_sql(sql: String) -> Self {
@@ -82,8 +90,11 @@ impl Default for SqlWriterValues {
 
 impl SqlWriter for SqlWriterValues {
     fn push_param(&mut self, value: Value) {
-        self.counter += 1;
-        write!(self.sql, "${}", self.counter).unwrap();
+        assert!(
+            self.values.len() < 65_535,
+            "PostgreSQL supports at most 65535 bind parameters; split the batch"
+        );
+        write!(self.sql, "${}", self.values.len() + 1).unwrap();
         self.values.push(value);
     }
 
