@@ -15,8 +15,11 @@
 use crate::SqlWriterValues;
 use crate::expr::write_expr;
 use crate::table::ColumnDef;
+use crate::table::ColumnValue;
+use crate::table::TableConstraint;
 use crate::table::write_column_spec;
 use crate::table::write_column_type;
+use crate::table::write_constraint;
 use crate::types::Iden;
 use crate::types::IntoIden;
 use crate::types::IntoTableRef;
@@ -70,7 +73,50 @@ impl AlterTable {
         self
     }
 
-    /// Modify a column in an existing table
+    /// Add a column only if it is absent.
+    pub fn add_column_if_not_exists(mut self, column: ColumnDef) -> Self {
+        self.options
+            .push(TableAlterOption::AddColumn(AddColumnOption {
+                column,
+                if_not_exists: true,
+            }));
+        self
+    }
+
+    /// Drop a column only if it exists.
+    pub fn drop_column_if_exists(mut self, column: impl IntoIden) -> Self {
+        self.options
+            .push(TableAlterOption::DropColumn(DropColumnOption {
+                column: column.into_iden(),
+                if_exists: true,
+            }));
+        self
+    }
+
+    /// Add a table constraint.
+    pub fn add_constraint(mut self, constraint: impl Into<TableConstraint>) -> Self {
+        self.options
+            .push(TableAlterOption::AddConstraint(constraint.into()));
+        self
+    }
+
+    /// Drop a named constraint.
+    pub fn drop_constraint(mut self, name: impl IntoIden) -> Self {
+        self.options
+            .push(TableAlterOption::DropConstraint(name.into_iden()));
+        self
+    }
+
+    /// Remove a column's default value.
+    pub fn drop_default(mut self, column: impl IntoIden) -> Self {
+        self.options
+            .push(TableAlterOption::DropDefault(column.into_iden()));
+        self
+    }
+
+    /// Modify a column's type, nullability, default or key constraints.
+    ///
+    /// Panics when rendering a generated or identity definition; use ADD COLUMN for those.
     pub fn modify_column(mut self, column: ColumnDef) -> Self {
         self.options.push(TableAlterOption::ModifyColumn(column));
         self
@@ -106,6 +152,9 @@ impl AlterTable {
 #[derive(Debug, Clone)]
 #[allow(clippy::enum_variant_names)] // add_foreign_key, drop_foreign_key, ...
 enum TableAlterOption {
+    AddConstraint(TableConstraint),
+    DropConstraint(Iden),
+    DropDefault(Iden),
     AddColumn(AddColumnOption),
     ModifyColumn(ColumnDef),
     RenameColumn(Iden, Iden),
@@ -125,6 +174,19 @@ struct DropColumnOption {
 }
 
 fn write_alter_table<W: SqlWriter>(w: &mut W, alter: &AlterTable) {
+    assert!(
+        matches!(&alter.table, Some(TableRef::Table(_, None))),
+        "ALTER TABLE requires an unaliased table name"
+    );
+    assert!(!alter.options.is_empty(), "ALTER TABLE requires an action");
+    assert!(
+        alter.options.len() == 1
+            || !alter
+                .options
+                .iter()
+                .any(|o| matches!(o, TableAlterOption::RenameColumn(..))),
+        "RENAME COLUMN must be a separate ALTER TABLE statement"
+    );
     w.push_str("ALTER TABLE ");
     if let Some(table) = &alter.table {
         write_table_ref(w, table);
@@ -135,6 +197,19 @@ fn write_alter_table<W: SqlWriter>(w: &mut W, alter: &AlterTable) {
             w.push_str(", ");
         }
         match option {
+            TableAlterOption::AddConstraint(constraint) => {
+                w.push_str("ADD ");
+                write_constraint(w, constraint);
+            }
+            TableAlterOption::DropConstraint(name) => {
+                w.push_str("DROP CONSTRAINT ");
+                write_iden(w, name);
+            }
+            TableAlterOption::DropDefault(column) => {
+                w.push_str("ALTER COLUMN ");
+                write_iden(w, column);
+                w.push_str(" DROP DEFAULT");
+            }
             TableAlterOption::AddColumn(AddColumnOption {
                 column,
                 if_not_exists,
@@ -151,6 +226,13 @@ fn write_alter_table<W: SqlWriter>(w: &mut W, alter: &AlterTable) {
                 write_column_spec(w, &column.spec);
             }
             TableAlterOption::ModifyColumn(column_def) => {
+                assert!(
+                    !matches!(
+                        column_def.spec.value,
+                        Some(ColumnValue::Generated(_) | ColumnValue::Identity(_))
+                    ),
+                    "modify_column does not change generated or identity definitions"
+                );
                 let mut is_first = true;
 
                 macro_rules! write_comma_if_not_first {
@@ -182,7 +264,7 @@ fn write_alter_table<W: SqlWriter>(w: &mut W, alter: &AlterTable) {
                     }
                 }
 
-                if let Some(default) = &column_def.spec.default {
+                if let Some(ColumnValue::Default(default)) = &column_def.spec.value {
                     write_comma_if_not_first!();
                     w.push_str("ALTER COLUMN ");
                     write_iden(w, &column_def.name);

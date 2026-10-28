@@ -17,6 +17,8 @@ use std::sync::Arc;
 use crate::expr::Expr;
 use crate::expr::write_expr;
 use crate::types::Iden;
+use crate::types::TableName;
+use crate::types::write_table_name;
 use crate::writer::SqlWriter;
 
 /// Specification of a table column.
@@ -41,15 +43,61 @@ impl ColumnDef {
         }
     }
 
+    /// Mark this column as a primary key.
+    pub fn primary_key(mut self) -> Self {
+        self.spec.primary_key = true;
+        self
+    }
+
+    /// Require unique values in this column.
+    pub fn unique(mut self) -> Self {
+        self.spec.unique = true;
+        self
+    }
+
+    /// Set a column type, including extension and user-defined types.
+    pub fn column_type(mut self, ty: ColumnType) -> Self {
+        self.ty = Some(ty);
+        self
+    }
+
+    /// Generate an identity value, rejecting explicit values unless the INSERT overrides them.
+    /// Panics if a default or generated expression is already set.
+    pub fn identity_always(self) -> Self {
+        self.identity(Identity::Always)
+    }
+
+    /// Generate an identity value when INSERT does not supply one.
+    /// Panics if a default or generated expression is already set.
+    pub fn identity_by_default(self) -> Self {
+        self.identity(Identity::ByDefault)
+    }
+
+    fn identity(mut self, identity: Identity) -> Self {
+        assert!(
+            !matches!(
+                self.spec.value,
+                Some(ColumnValue::Default(_) | ColumnValue::Generated(_))
+            ),
+            "an identity column cannot have a default or generated expression"
+        );
+        self.spec.value = Some(ColumnValue::Identity(identity));
+        self
+    }
+
     /// Set default value for the column.
+
     ///
     /// ## Panics
     /// This method will panic if the column is a generated column.
     pub fn default(mut self, expr: Expr) -> Self {
-        if self.spec.generated.is_some() {
+        if matches!(
+            self.spec.value,
+            Some(ColumnValue::Generated(_) | ColumnValue::Identity(_))
+        ) {
             panic!("A generated column cannot have a default value.");
         }
-        self.spec.default = Some(expr);
+        self.spec.value = Some(ColumnValue::Default(expr));
         self
     }
 
@@ -137,13 +185,14 @@ impl ColumnDef {
     ///
     /// ## Panics
     /// This method will panic if:
-    /// - `scale` is greater than `precision`,
+    /// - `scale` is outside -1000..=1000 (negative scales require PostgreSQL 15+),
     /// - `precision` is less than or equal to zero,
     /// - `precision` is greater than 1000.
     pub fn numeric(mut self, precision: i32, scale: i32) -> Self {
-        if scale > precision {
-            panic!("Numeric scale cannot be greater than precision.");
-        }
+        assert!(
+            (-1000..=1000).contains(&scale),
+            "Numeric scale must be between -1000 and 1000."
+        );
         if precision <= 0 {
             panic!("Numeric precision must be greater than zero.");
         }
@@ -283,13 +332,16 @@ impl ColumnDef {
     where
         E: Into<Expr>,
     {
-        if self.spec.default.is_some() {
+        if matches!(
+            self.spec.value,
+            Some(ColumnValue::Default(_) | ColumnValue::Identity(_))
+        ) {
             panic!("A generated column cannot have a default value.");
         }
-        self.spec.generated = Some(GeneratedColumn {
+        self.spec.value = Some(ColumnValue::Generated(GeneratedColumn {
             expr: expr.into(),
             kind: GeneratedColumnKind::Stored,
-        });
+        }));
         self
     }
 
@@ -304,13 +356,16 @@ impl ColumnDef {
     where
         E: Into<Expr>,
     {
-        if self.spec.default.is_some() {
+        if matches!(
+            self.spec.value,
+            Some(ColumnValue::Default(_) | ColumnValue::Identity(_))
+        ) {
             panic!("A generated column cannot have a default value.");
         }
-        self.spec.generated = Some(GeneratedColumn {
+        self.spec.value = Some(ColumnValue::Generated(GeneratedColumn {
             expr: expr.into(),
             kind: GeneratedColumnKind::Virtual,
-        });
+        }));
         self
     }
 }
@@ -365,6 +420,8 @@ pub enum ColumnType {
     Uuid,
 
     Array(Arc<ColumnType>),
+    /// A quoted, optionally schema-qualified user-defined or extension type.
+    Custom(TableName),
 }
 
 /// Specification of column attributes.
@@ -373,13 +430,33 @@ pub enum ColumnType {
 #[expect(missing_docs)]
 pub struct ColumnSpec {
     pub nullable: Option<bool>,
-    pub default: Option<Expr>,
-    pub generated: Option<GeneratedColumn>,
+    pub value: Option<ColumnValue>,
     pub unique: bool,
     pub primary_key: bool,
 }
 
+/// Mutually exclusive ways PostgreSQL can supply a column's value.
+#[derive(Debug, Clone)]
+pub enum ColumnValue {
+    /// A default expression.
+    Default(Expr),
+    /// A stored or virtual generated expression.
+    Generated(GeneratedColumn),
+    /// An identity sequence.
+    Identity(Identity),
+}
+
+/// Identity sequence behavior.
+#[derive(Debug, Clone, Copy)]
+pub enum Identity {
+    /// Explicit values require OVERRIDING SYSTEM VALUE.
+    Always,
+    /// Explicit values override the sequence default.
+    ByDefault,
+}
+
 /// Generated column specification.
+
 #[derive(Debug, Clone)]
 #[non_exhaustive]
 #[expect(missing_docs)]
@@ -454,6 +531,7 @@ pub(crate) fn write_column_type<W: SqlWriter>(w: &mut W, column_type: &ColumnTyp
 
         ColumnType::Uuid => w.push_str("uuid"),
 
+        ColumnType::Custom(name) => write_table_name(w, name),
         ColumnType::Array(ty) => {
             write_column_type(w, ty);
             w.push_str("[]");
@@ -464,8 +542,7 @@ pub(crate) fn write_column_type<W: SqlWriter>(w: &mut W, column_type: &ColumnTyp
 pub(crate) fn write_column_spec<W: SqlWriter>(w: &mut W, column_spec: &ColumnSpec) {
     let ColumnSpec {
         nullable,
-        default,
-        generated,
+        value,
         unique,
         primary_key,
     } = column_spec;
@@ -474,7 +551,7 @@ pub(crate) fn write_column_spec<W: SqlWriter>(w: &mut W, column_spec: &ColumnSpe
         w.push_str(if *nullable { " NULL" } else { " NOT NULL" });
     }
 
-    if let Some(default) = default {
+    if let Some(ColumnValue::Default(default)) = value {
         w.push_str(" DEFAULT ");
         match default {
             Expr::Value(_) | Expr::Keyword(_) => write_expr(w, default),
@@ -486,13 +563,20 @@ pub(crate) fn write_column_spec<W: SqlWriter>(w: &mut W, column_spec: &ColumnSpe
         }
     }
 
-    if let Some(generated) = generated {
+    if let Some(ColumnValue::Generated(generated)) = value {
         w.push_str(" GENERATED ALWAYS AS (");
         write_expr(w, &generated.expr);
         w.push_str(")");
         w.push_str(match generated.kind {
             GeneratedColumnKind::Stored => " STORED",
             GeneratedColumnKind::Virtual => " VIRTUAL",
+        });
+    }
+
+    if let Some(ColumnValue::Identity(identity)) = value {
+        w.push_str(match identity {
+            Identity::Always => " GENERATED ALWAYS AS IDENTITY",
+            Identity::ByDefault => " GENERATED BY DEFAULT AS IDENTITY",
         });
     }
 

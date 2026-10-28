@@ -307,6 +307,11 @@ fn write_create_index<W: SqlWriter>(w: &mut W, index: &CreateIndex) {
 
 /// Write table index definition inside CREATE TABLE statement.
 pub(crate) fn write_table_index<W: SqlWriter>(w: &mut W, index: &CreateIndex) {
+    if let Some(name) = &index.name {
+        w.push_str("CONSTRAINT ");
+        write_iden(w, name);
+        w.push_char(' ');
+    }
     if index.primary {
         w.push_str("PRIMARY KEY ");
     } else if index.unique {

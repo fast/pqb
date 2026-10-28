@@ -16,8 +16,10 @@ use crate::SqlWriterValues;
 use crate::index::CreateIndex;
 use crate::index::write_table_index;
 use crate::table::ColumnDef;
+use crate::table::TableConstraint;
 use crate::table::write_column_spec;
 use crate::table::write_column_type;
+use crate::table::write_constraint;
 use crate::types::IntoTableRef;
 use crate::types::TableRef;
 use crate::types::write_iden;
@@ -30,6 +32,7 @@ pub struct CreateTable {
     table: Option<TableRef>,
     columns: Vec<ColumnDef>,
     indexes: Vec<CreateIndex>,
+    constraints: Vec<TableConstraint>,
     if_not_exists: bool,
     temporary: bool,
 }
@@ -80,6 +83,12 @@ impl CreateTable {
         self
     }
 
+    /// Add a primary key, unique, check or foreign key constraint.
+    pub fn constraint(mut self, constraint: impl Into<TableConstraint>) -> Self {
+        self.constraints.push(constraint.into());
+        self
+    }
+
     /// Add a primary key index.
     pub fn primary_key(mut self, index: CreateIndex) -> Self {
         self.indexes.push(index.primary());
@@ -88,6 +97,14 @@ impl CreateTable {
 }
 
 fn write_create_table<W: SqlWriter>(w: &mut W, table: &CreateTable) {
+    assert!(
+        matches!(&table.table, Some(TableRef::Table(_, None))),
+        "CREATE TABLE requires an unaliased table name"
+    );
+    assert!(
+        table.columns.iter().all(|column| column.ty.is_some()),
+        "CREATE TABLE columns require data types"
+    );
     w.push_str("CREATE ");
     if table.temporary {
         w.push_str("TEMPORARY ");
@@ -124,6 +141,10 @@ fn write_create_table<W: SqlWriter>(w: &mut W, table: &CreateTable) {
     for idx in &table.indexes {
         write_comma_if_not_first!();
         write_table_index(w, idx);
+    }
+    for constraint in &table.constraints {
+        write_comma_if_not_first!();
+        write_constraint(w, constraint);
     }
     let _ = is_first;
     w.push_str(" )");
