@@ -27,6 +27,9 @@ readme.workspace = true
 repository.workspace = true
 rust-version.workspace = true
 
+[package.metadata.docs.rs]
+all-features = true
+
 [features]
 with-chrono = ["dep:chrono"]
 with-json = ["dep:serde_json"]

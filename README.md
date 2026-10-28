@@ -255,7 +255,7 @@ DDL utility statements do not accept query parameters. Their `to_values()` metho
 
 `to_values()` is the normal path for executing data queries. Parameter numbering is shared across the entire statement, including CTEs, subqueries, unions and returning expressions. `to_sql()` renders inline literals using PostgreSQL's literal type inference for inspection and statements that need them; PostgreSQL text cannot contain NUL bytes. Prepared queries are limited to 65,535 parameters, so split larger batches.
 
-`Expr::custom`, custom function names, `cast_as` type syntax, and custom index methods accept **trusted SQL syntax**. Never interpolate user input into them. `SqlFragment` interleaves syntax and bound expressions without interpreting placeholder-like text:
+`Expr::custom`, custom function names, and `cast_as` type syntax accept **trusted SQL syntax**. Never interpolate user input into them. Custom index methods are quoted as identifiers. `SqlFragment` interleaves syntax and bound expressions without interpreting placeholder-like text:
 
 ```rust
 use pqb::expr::{Expr, SqlFragment};
