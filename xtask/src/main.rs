@@ -63,7 +63,8 @@ struct CommandTest {
 
 impl CommandTest {
     fn run(self) {
-        run_command(make_test_cmd(self.no_capture, &[]));
+        run_command(make_test_cmd(self.no_capture, false));
+        run_command(make_test_cmd(self.no_capture, true));
     }
 }
 
@@ -128,12 +129,14 @@ fn make_build_cmd(locked: bool) -> StdCommand {
     cmd
 }
 
-fn make_test_cmd(no_capture: bool, features: &[&str]) -> StdCommand {
+fn make_test_cmd(no_capture: bool, all_features: bool) -> StdCommand {
     let mut cmd = find_command("cargo");
-    cmd.args(["test", "--workspace", "--no-default-features"]);
-    if !features.is_empty() {
-        cmd.args(["--features", features.join(",").as_str()]);
-    }
+    cmd.args(["test", "--workspace"]);
+    cmd.arg(if all_features {
+        "--all-features"
+    } else {
+        "--no-default-features"
+    });
     if no_capture {
         cmd.args(["--", "--nocapture"]);
     }

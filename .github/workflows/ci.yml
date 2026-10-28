@@ -53,7 +53,7 @@ jobs:
     strategy:
       matrix:
         os: [ ubuntu-24.04, macos-14, windows-2022 ]
-        rust-version: [ "1.93.0", "stable" ]
+        rust-version: [ "1.94.0", "stable" ]
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v6
@@ -68,6 +68,33 @@ jobs:
         run: cargo x test --no-capture
         shell: bash
 
+  postgres:
+    name: PostgreSQL ${{ matrix.postgres }}
+    runs-on: ubuntu-24.04
+    strategy:
+      matrix:
+        postgres: [ "14", "18" ]
+    services:
+      postgres:
+        image: postgres:${{ matrix.postgres }}
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      PQB_TEST_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/postgres
+    steps:
+      - uses: actions/checkout@v6
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Execute generated queries with both drivers
+        run: cargo test --locked -p pqb --all-features --test postgres_live -- --ignored
+
   required:
     name: Required
     runs-on: ubuntu-24.04
@@ -75,12 +102,14 @@ jobs:
     needs:
       - check
       - test
+      - postgres
     steps:
       - name: Guardian
         run: |
           if [[ ! ( \
                  "${{ needs.check.result }}" == "success" \
               && "${{ needs.test.result }}" == "success" \
+              && "${{ needs.postgres.result }}" == "success" \
               ) ]]; then
             echo "Required jobs haven't been completed successfully."
             exit -1
