@@ -117,6 +117,30 @@ impl WindowFrame {
 }
 
 pub(crate) fn write_window<W: SqlWriter>(w: &mut W, window: &Window) {
+    if let Some(frame) = &window.frame {
+        let mut offsets = [frame.start, frame.end]
+            .into_iter()
+            .filter_map(|bound| match bound {
+                FrameBound::Preceding(n) | FrameBound::Following(n) => Some(n),
+                _ => None,
+            });
+        match frame.units {
+            FrameUnits::Range => assert!(
+                offsets.count() == 0 || window.orders.len() == 1,
+                "RANGE offsets require exactly one ORDER BY expression"
+            ),
+            FrameUnits::Rows | FrameUnits::Groups => {
+                assert!(
+                    frame.units != FrameUnits::Groups || !window.orders.is_empty(),
+                    "GROUPS frames require ORDER BY"
+                );
+                assert!(
+                    offsets.all(|n| n <= i64::MAX as u64),
+                    "ROWS and GROUPS offsets must fit a PostgreSQL bigint"
+                );
+            }
+        }
+    }
     w.push_str(" OVER (");
     if !window.partitions.is_empty() {
         w.push_str("PARTITION BY ");

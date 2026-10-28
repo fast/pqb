@@ -208,3 +208,37 @@ fn between_groups_compound_bounds() {
         "SELECT TRUE BETWEEN (FALSE OR TRUE) AND TRUE"
     );
 }
+
+#[test]
+fn function_and_window_modifiers_reject_unsupported_combinations() {
+    use pqb::func::FunctionCall;
+    use pqb::query::FrameBound;
+    use pqb::query::FrameUnits;
+    use pqb::query::Order;
+    use pqb::query::Window;
+    use pqb::query::WindowFrame;
+    let invalid = [
+        FunctionCall::count_all().distinct(),
+        FunctionCall::count(Expr::column("id"))
+            .distinct()
+            .over(Window::new()),
+        FunctionCall::sum(Expr::column("id"))
+            .order_by([Order::column("id")])
+            .over(Window::new()),
+        FunctionCall::lower("text").filter(true),
+        FunctionCall::row_number(),
+        FunctionCall::sum(1).over(Window::new().frame(WindowFrame::new(
+            FrameUnits::Groups,
+            FrameBound::Preceding(1),
+            FrameBound::CurrentRow,
+        ))),
+        FunctionCall::sum(1).over(Window::new().frame(WindowFrame::new(
+            FrameUnits::Range,
+            FrameBound::Preceding(1),
+            FrameBound::CurrentRow,
+        ))),
+    ];
+    for call in invalid {
+        assert!(std::panic::catch_unwind(|| Select::new().expr(call).to_sql()).is_err());
+    }
+}

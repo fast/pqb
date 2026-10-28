@@ -881,6 +881,7 @@ fn write_binary_op<W: SqlWriter>(w: &mut W, op: &BinaryOp) {
 }
 
 pub(crate) fn write_tuple<W: SqlWriter>(w: &mut W, exprs: &[Expr]) {
+    assert!(!exprs.is_empty(), "SQL tuples cannot be empty");
     w.push_char('(');
     for (i, expr) in exprs.iter().enumerate() {
         if i != 0 {
@@ -943,7 +944,7 @@ fn well_known_high_precedence(expr: &Expr, outer_op: &Operator) -> bool {
         return false;
     };
 
-    if inner_op.is_arithmetic() || inner_op.is_shift() {
+    if inner_op.is_arithmetic() {
         return outer_op.is_comparison()
             || outer_op.is_between()
             || outer_op.is_in()
@@ -1004,13 +1005,6 @@ impl Operator {
                 | Operator::Binary(BinaryOp::IsNot)
                 | Operator::Binary(BinaryOp::IsDistinctFrom)
                 | Operator::Binary(BinaryOp::IsNotDistinctFrom)
-        )
-    }
-
-    fn is_shift(&self) -> bool {
-        matches!(
-            self,
-            Operator::Binary(BinaryOp::LShift) | Operator::Binary(BinaryOp::RShift)
         )
     }
 

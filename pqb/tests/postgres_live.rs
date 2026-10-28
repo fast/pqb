@@ -178,6 +178,16 @@ fn value_checks() -> Select {
     ];
     Select::new()
         .expr(Expr::value(1).is_in(Vec::<i32>::new()).not())
+        .expr(
+            Expr::value(64)
+                .cast_as("integer")
+                .strictly_right_of(
+                    Expr::value(1)
+                        .cast_as("integer")
+                        .binary(pqb::expr::BinaryOp::RShift, 1),
+                )
+                .eq(64),
+        )
         .exprs(checks.into_iter().map(|(value, ty, expected)| {
             Expr::value(value)
                 .cast_as(ty)
