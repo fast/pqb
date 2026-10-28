@@ -149,11 +149,35 @@ Adapters support homogeneous, one-dimensional arrays with nullable elements. `Va
 | CTEs | Multiple CTEs, `VALUES`, recursive queries, materialization hints, data-modifying statements |
 | Expressions | Arithmetic, comparisons, NULL tests, range/array containment, JSON access, LIKE/ILIKE, tuples, subqueries, `EXISTS`, `CASE` |
 | Aggregation | Aggregate `DISTINCT`, input ordering, `FILTER`, window partition/order/frame |
-| Writes | Multi-row insert, insert from select, default values, upsert, update from, delete using, aliased returning |
+| Writes | Multi-row insert, insert from select, default values, upsert, update from, delete using, MERGE, aliased returning |
 | PostgreSQL operations | Row locks, `NOWAIT`, `SKIP LOCKED`, table sampling, `EXPLAIN` options |
 | DDL | Create/alter/drop tables, identity/generated columns, relational constraints, create/drop indexes and schemas |
 
+### MERGE
+
+`Merge` (PostgreSQL 15+) evaluates ordered `MergeWhen` clauses against a source table or subquery. `MergeAction` supports update, delete, insert, default values and do nothing. Conditional clauses use `.and_where(...)`; an unconditional clause must come last for its match kind. RETURNING, MERGE in a CTE and `not_matched_by_source` require PostgreSQL 17+. WITH RECURSIVE is not supported for MERGE.
+
+```rust
+use pqb::expr::Expr;
+use pqb::query::{Merge, MergeAction, MergeWhen};
+use pqb::types::TableRef;
+
+let query = Merge::new()
+    .into_table(TableRef::from("inventory").alias("t"))
+    .using(TableRef::from("incoming").alias("s"))
+    .on(Expr::column(("t", "id")).eq(Expr::column(("s", "id"))))
+    .when(MergeWhen::matched(MergeAction::update([
+        ("qty", Expr::column(("s", "qty"))),
+    ])))
+    .when(MergeWhen::not_matched(MergeAction::insert(
+        ["id", "qty"],
+        [Expr::column(("s", "id")), Expr::column(("s", "qty"))],
+    )))
+    .to_values();
+```
+
 ### Dynamic predicates
+
 
 `Expr::all` combines conditions with AND; `Expr::any` uses OR. Empty collections yield TRUE and FALSE respectively. Empty `IN` and `NOT IN` lists also become boolean constants without allocating parameters. Conditional Rust code can build the list before passing it to PQB.
 
@@ -254,7 +278,7 @@ Builders reject basic structural mistakes such as missing mutation targets or in
 
 The test suite parses generated SQL with PostgreSQL's parser. CI also executes representative relational workflows and parameter roundtrips through both drivers on PostgreSQL 14 and 18. Version-specific features require their corresponding server: negative numeric scales and scales exceeding precision require PostgreSQL 15+, and virtual generated columns require PostgreSQL 18+.
 
-PQB does not yet have dedicated builders for MERGE, COPY, partition management, or every extension-specific SQL construct. Use explicit trusted SQL where the structured API does not cover a statement. PQB does not implement an ORM, migration runner, or connection management.
+PQB does not yet have dedicated builders for COPY, partition management, or every extension-specific SQL construct. Use explicit trusted SQL where the structured API does not cover a statement. PQB does not implement an ORM, migration runner, or connection management.
 
 ## Compatibility notes
 

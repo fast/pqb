@@ -15,10 +15,12 @@
 use crate::SqlWriterValues;
 use crate::query::Delete;
 use crate::query::Insert;
+use crate::query::Merge;
 use crate::query::Select;
 use crate::query::Update;
 use crate::query::write_delete;
 use crate::query::write_insert;
+use crate::query::write_merge;
 use crate::query::write_select;
 use crate::query::write_update;
 use crate::writer::SqlWriter;
@@ -32,6 +34,7 @@ pub enum Statement {
     Insert(Insert),
     Update(Update),
     Delete(Delete),
+    Merge(Merge),
 }
 
 impl From<Select> for Statement {
@@ -58,6 +61,12 @@ impl From<Delete> for Statement {
     }
 }
 
+impl From<Merge> for Statement {
+    fn from(merge: Merge) -> Self {
+        Statement::Merge(merge)
+    }
+}
+
 impl Statement {
     /// Render a query with inline literals.
     pub fn to_sql(&self) -> String {
@@ -80,5 +89,6 @@ pub(crate) fn write_statement<W: SqlWriter>(writer: &mut W, statement: &Statemen
         Statement::Insert(query) => write_insert(writer, query),
         Statement::Update(query) => write_update(writer, query),
         Statement::Delete(query) => write_delete(writer, query),
+        Statement::Merge(query) => write_merge(writer, query),
     }
 }

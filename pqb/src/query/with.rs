@@ -26,7 +26,7 @@ use crate::value::Value;
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct With {
     ctes: Vec<CommonTableExpression>,
-    recursive: bool,
+    pub(super) recursive: bool,
 }
 
 impl With {
@@ -103,7 +103,7 @@ impl CommonTableExpression {
         self.query(select)
     }
 
-    /// Set a SELECT, INSERT, UPDATE or DELETE source.
+    /// Set a SELECT, INSERT, UPDATE, DELETE or MERGE source (MERGE requires PostgreSQL 17+).
     ///
     /// A data-modifying CTE needs RETURNING if its output is referenced by the outer query.
     pub fn query(mut self, query: impl Into<Statement>) -> Self {
