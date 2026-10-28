@@ -207,6 +207,26 @@ enum OnConflictUpdate {
 }
 
 pub(crate) fn write_on_conflict<W: SqlWriter>(w: &mut W, on_conflict: &OnConflict) {
+    match &on_conflict.action {
+        Some(OnConflictAction::DoNothing) => assert!(
+            on_conflict.action_conditions.is_empty(),
+            "DO NOTHING cannot have an action WHERE"
+        ),
+        Some(OnConflictAction::Update(updates)) => {
+            assert!(!updates.is_empty(), "DO UPDATE requires assignments");
+            assert!(
+                !matches!(&on_conflict.targets, OnConflictTarget::Exprs(exprs) if exprs.is_empty()),
+                "DO UPDATE requires a conflict target"
+            );
+        }
+        None => panic!("ON CONFLICT requires DO NOTHING or DO UPDATE"),
+    }
+    if !on_conflict.target_conditions.is_empty() {
+        assert!(
+            matches!(&on_conflict.targets, OnConflictTarget::Exprs(exprs) if !exprs.is_empty()),
+            "a conflict target WHERE requires index expressions"
+        );
+    }
     w.push_str(" ON CONFLICT");
     match &on_conflict.targets {
         OnConflictTarget::Exprs(exprs) => {

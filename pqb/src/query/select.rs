@@ -424,10 +424,22 @@ impl Select {
 }
 
 impl Select {
-    pub(crate) fn columns_len(&self) -> usize {
-        self.set
-            .as_ref()
-            .map_or(self.selects.len(), |set| set.left.columns_len())
+    pub(crate) fn columns_len(&self) -> Option<usize> {
+        if let Some(set) = &self.set {
+            return set.left.columns_len();
+        }
+        if self.selects.iter().any(|s| {
+            matches!(
+                s.expr,
+                Expr::Asterisk
+                    | Expr::Column(crate::types::ColumnRef::Asterisk(_))
+                    | Expr::Custom(_)
+                    | Expr::Fragment(_)
+            )
+        }) {
+            return None;
+        }
+        Some(self.selects.len())
     }
 }
 
@@ -436,6 +448,19 @@ impl Select {
 pub struct SelectExpr {
     expr: Expr,
     alias: Option<Iden>,
+}
+
+impl SelectExpr {
+    /// Construct a projection expression without an alias.
+    pub fn new(expr: impl Into<Expr>) -> Self {
+        expr.into().into()
+    }
+
+    /// Set the output column name.
+    pub fn alias(mut self, alias: impl IntoIden) -> Self {
+        self.alias = Some(alias.into_iden());
+        self
+    }
 }
 
 impl<T> From<T> for SelectExpr
@@ -739,7 +764,7 @@ fn write_select_tail<W: SqlWriter>(w: &mut W, select: &Select) {
     }
 }
 
-fn write_select_expr<W: SqlWriter>(w: &mut W, select_expr: &SelectExpr) {
+pub(crate) fn write_select_expr<W: SqlWriter>(w: &mut W, select_expr: &SelectExpr) {
     write_expr(w, &select_expr.expr);
     if let Some(alias) = &select_expr.alias {
         w.push_str(" AS ");

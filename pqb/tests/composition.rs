@@ -106,3 +106,36 @@ fn data_modifying_cte_returns_deleted_rows() {
     );
     assert_eq!(values, vec![true.into()]);
 }
+
+#[test]
+fn joined_mutations_and_aliased_returning() {
+    use pqb::query::Update;
+    let update = Update::new()
+        .table("accounts")
+        .value("balance", Expr::column(("changes", "balance")))
+        .from("changes")
+        .and_where(Expr::column(("accounts", "id")).eq(Expr::column(("changes", "id"))))
+        .and_where(Expr::column(("changes", "version")).eq(3))
+        .returning(Returning::expr_as(
+            Expr::column(("accounts", "id")),
+            "account_id",
+        ));
+    update.to_sql().validate();
+    let (sql, values) = update.to_values().into_parts();
+    assert_eq!(
+        sql.validate(),
+        "UPDATE \"accounts\" SET \"balance\" = \"changes\".\"balance\" FROM \"changes\" WHERE \"accounts\".\"id\" = \"changes\".\"id\" AND \"changes\".\"version\" = $1 RETURNING \"accounts\".\"id\" AS \"account_id\""
+    );
+    assert_eq!(values, vec![3.into()]);
+
+    let delete = Delete::new()
+        .from_table("accounts")
+        .using("changes")
+        .and_where(Expr::column(("accounts", "id")).eq(Expr::column(("changes", "id"))))
+        .and_where(Expr::column(("changes", "deleted")).eq(true))
+        .returning(Returning::column(("accounts", "id")));
+    delete.to_sql().validate();
+    let (sql, values) = delete.to_values().into_parts();
+    assert!(sql.validate().contains(" USING \"changes\" WHERE "));
+    assert_eq!(values, vec![true.into()]);
+}

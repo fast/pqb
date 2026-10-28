@@ -14,7 +14,10 @@
 
 use crate::expr::Expr;
 use crate::expr::write_expr;
+use crate::query::SelectExpr;
+use crate::query::write_select_expr;
 use crate::types::IntoColumnRef;
+use crate::types::IntoIden;
 use crate::writer::SqlWriter;
 
 /// RETURNING clause.
@@ -24,9 +27,19 @@ use crate::writer::SqlWriter;
 pub enum Returning {
     All,
     Exprs(Vec<Expr>),
+    SelectExprs(Vec<SelectExpr>),
 }
 
 impl Returning {
+    /// Return an expression with an output alias.
+    pub fn expr_as(expr: impl Into<Expr>, alias: impl IntoIden) -> Self {
+        Self::SelectExprs(vec![SelectExpr::new(expr).alias(alias)])
+    }
+
+    /// Return projections with optional aliases, using the same expressions as SELECT.
+    pub fn select_exprs(exprs: impl IntoIterator<Item = SelectExpr>) -> Self {
+        Self::SelectExprs(exprs.into_iter().collect())
+    }
     /// Create a RETURNING * clause.
     pub fn all() -> Self {
         Self::All
@@ -64,11 +77,27 @@ pub(crate) fn write_returning<W: SqlWriter>(w: &mut W, returning: &Returning) {
     match returning {
         Returning::All => w.push_char('*'),
         Returning::Exprs(exprs) => {
+            assert!(
+                !exprs.is_empty(),
+                "RETURNING requires at least one expression"
+            );
             for (i, expr) in exprs.iter().enumerate() {
                 if i > 0 {
                     w.push_str(", ");
                 }
                 write_expr(w, expr);
+            }
+        }
+        Returning::SelectExprs(exprs) => {
+            assert!(
+                !exprs.is_empty(),
+                "RETURNING requires at least one expression"
+            );
+            for (i, expr) in exprs.iter().enumerate() {
+                if i > 0 {
+                    w.push_str(", ");
+                }
+                write_select_expr(w, expr);
             }
         }
     }

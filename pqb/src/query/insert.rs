@@ -107,18 +107,56 @@ impl Insert {
     /// # Panics
     ///
     /// Panics if the number of values does not match the number of columns specified.
-    pub fn values<I>(mut self, values: I) -> Self
+    pub fn values<I>(self, values: I) -> Self
     where
         I: IntoIterator<Item = Expr>,
     {
-        let values = values.into_iter().collect::<Vec<_>>();
-        assert_eq!(values.len(), self.columns.len());
-        if !values.is_empty() {
-            if let Some(InsertValueSource::Values(vs)) = &mut self.source {
-                vs.push(values);
-            } else {
-                self.source = Some(InsertValueSource::Values(vec![values]));
-            }
+        self.try_values(values).expect("invalid INSERT row")
+    }
+
+    /// Append a row, returning a descriptive error for empty or inconsistent rows.
+    ///
+    /// If columns are omitted, their order is the table's declared order. The first row sets the
+    /// width.
+    pub fn try_values<I>(mut self, values: I) -> Result<Self, InsertError>
+    where
+        I: IntoIterator<Item = Expr>,
+    {
+        let values: Vec<_> = values.into_iter().collect();
+        if values.is_empty() {
+            return Err(InsertError::EmptyRow);
+        }
+        let width = if !self.columns.is_empty() {
+            Some(self.columns.len())
+        } else if let Some(InsertValueSource::Values(rows)) = &self.source {
+            Some(rows[0].len())
+        } else {
+            None
+        };
+        if let Some(expected) = width
+            && values.len() != expected
+        {
+            return Err(InsertError::ColumnCount {
+                expected,
+                actual: values.len(),
+            });
+        }
+        if let Some(InsertValueSource::Values(rows)) = &mut self.source {
+            rows.push(values);
+        } else {
+            self.source = Some(InsertValueSource::Values(vec![values]));
+        }
+        Ok(self)
+    }
+
+    /// Append several rows. Panics on an empty or inconsistent row, like [`Self::values`].
+    pub fn rows<I, R>(mut self, rows: I) -> Self
+    where
+        I: IntoIterator<Item = R>,
+        R: IntoIterator<Item = Expr>,
+    {
+        for row in rows {
+            self = self.values(row);
         }
         self
     }
@@ -127,13 +165,22 @@ impl Insert {
     ///
     /// # Panics
     ///
-    /// Panics if the number of selected columns does not match the number of columns specified.
+    /// Panics if known projection and target widths differ. Wildcard expansion is checked by
+    /// PostgreSQL.
     pub fn select_from<S>(mut self, select: S) -> Self
     where
         S: Into<Select>,
     {
         let select = select.into();
-        assert_eq!(select.columns_len(), self.columns.len());
+        if !self.columns.is_empty()
+            && let Some(width) = select.columns_len()
+        {
+            assert_eq!(
+                width,
+                self.columns.len(),
+                "INSERT projection width does not match target columns"
+            );
+        }
         self.source = Some(InsertValueSource::Select(Box::new(select)));
         self
     }
@@ -164,7 +211,51 @@ enum InsertValueSource {
     Select(Box<Select>),
 }
 
+/// An invalid row supplied to [`Insert::try_values`].
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum InsertError {
+    /// A VALUES row cannot be empty. Use DEFAULT VALUES to insert a default row.
+    EmptyRow,
+    /// The row width differs from the target columns or preceding rows.
+    ColumnCount {
+        /// Required number of expressions.
+        expected: usize,
+        /// Supplied number of expressions.
+        actual: usize,
+    },
+}
+
+impl std::fmt::Display for InsertError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::EmptyRow => f.write_str("INSERT row is empty; use default_values()"),
+            Self::ColumnCount { expected, actual } => write!(
+                f,
+                "INSERT row has {actual} expressions; expected {expected}"
+            ),
+        }
+    }
+}
+
+impl std::error::Error for InsertError {}
+
 pub(crate) fn write_insert<W: SqlWriter>(w: &mut W, insert: &Insert) {
+    assert!(
+        matches!(&insert.table, Some(TableRef::Table(..))),
+        "INSERT requires a target table"
+    );
+    assert!(
+        insert.source.is_some() || (insert.defaults == Some(1) && insert.columns.is_empty()),
+        "INSERT requires VALUES, SELECT or DEFAULT VALUES"
+    );
+    if let Some(InsertValueSource::Values(rows)) = &insert.source
+        && !insert.columns.is_empty()
+    {
+        assert!(
+            rows.iter().all(|row| row.len() == insert.columns.len()),
+            "INSERT row width does not match target columns"
+        );
+    }
     if let Some(with) = &insert.with {
         write_with(w, with);
         w.push_char(' ');
@@ -183,14 +274,16 @@ pub(crate) fn write_insert<W: SqlWriter>(w: &mut W, insert: &Insert) {
     {
         w.push_str(" DEFAULT VALUES");
     } else {
-        w.push_str(" (");
-        for (i, col) in insert.columns.iter().enumerate() {
-            if i > 0 {
-                w.push_str(", ");
+        if !insert.columns.is_empty() {
+            w.push_str(" (");
+            for (i, col) in insert.columns.iter().enumerate() {
+                if i > 0 {
+                    w.push_str(", ");
+                }
+                write_iden(w, col);
             }
-            write_iden(w, col);
+            w.push_str(")");
         }
-        w.push_str(")");
 
         if let Some(source) = &insert.source {
             w.push_char(' ');

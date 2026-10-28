@@ -32,6 +32,7 @@ use crate::writer::SqlWriter;
 pub struct Update {
     table: Option<TableRef>,
     values: Vec<(Iden, Expr)>,
+    from: Vec<TableRef>,
     conditions: Vec<Expr>,
     returning: Option<Returning>,
     with: Option<With>,
@@ -63,6 +64,17 @@ impl Update {
         T: IntoTableRef,
     {
         self.table = Some(table.into());
+        self
+    }
+
+    /// Set one column to an expression or bound value.
+    pub fn value<C: IntoIden, E: Into<Expr>>(self, column: C, value: E) -> Self {
+        self.values([(column, value.into())])
+    }
+
+    /// Add a table or subquery to UPDATE ... FROM.
+    pub fn from<T: IntoTableRef>(mut self, table: T) -> Self {
+        self.from.push(table.into());
         self
     }
 
@@ -101,6 +113,14 @@ impl Update {
 }
 
 pub(crate) fn write_update<W: SqlWriter>(w: &mut W, update: &Update) {
+    assert!(
+        matches!(&update.table, Some(TableRef::Table(..))),
+        "UPDATE requires a target table"
+    );
+    assert!(
+        !update.values.is_empty(),
+        "UPDATE requires at least one assignment"
+    );
     if let Some(with) = &update.with {
         write_with(w, with);
         w.push_char(' ');
@@ -122,6 +142,11 @@ pub(crate) fn write_update<W: SqlWriter>(w: &mut W, update: &Update) {
             w.push_str(" = ");
             write_expr(w, val);
         }
+    }
+
+    for (i, table) in update.from.iter().enumerate() {
+        w.push_str(if i == 0 { " FROM " } else { ", " });
+        write_table_ref(w, table);
     }
 
     if let Some(condition) = Expr::from_conditions(update.conditions.clone()) {
