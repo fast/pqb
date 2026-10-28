@@ -18,10 +18,10 @@ resolver = "3"
 
 [workspace.package]
 edition = "2024"
-homepage = "https://github.com/tisonkun/pqb"
+homepage = "https://github.com/fast/pqb"
 license = "Apache-2.0"
 readme = "README.md"
-repository = "https://github.com/tisonkun/pqb"
+repository = "https://github.com/fast/pqb"
 rust-version = "1.94.0"
 
 [workspace.lints.rust]
