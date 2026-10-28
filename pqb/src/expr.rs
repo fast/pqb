@@ -820,6 +820,12 @@ fn write_binary_expr<W: SqlWriter>(w: &mut W, lhs: &Expr, op: &BinaryOp, rhs: &E
         (BinaryOp::Is | BinaryOp::IsNot, Expr::Value(Value::Bool(value))) => {
             write_value(w, &Value::Bool(*value));
         }
+        (BinaryOp::Is | BinaryOp::IsNot, Expr::Value(value)) if value.is_null() => {
+            w.push_str("NULL");
+        }
+        (BinaryOp::Is | BinaryOp::IsNot, Expr::Value(_)) => {
+            panic!("IS accepts boolean or NULL values; use eq for value comparisons");
+        }
         _ => write_expr(w, rhs),
     }
     if right_paren {

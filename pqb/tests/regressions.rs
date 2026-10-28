@@ -90,6 +90,11 @@ fn ddl_literals_are_not_bind_parameters() {
 
 #[test]
 fn truth_tests_do_not_bind_sql_keywords() {
+    let nullable = Select::new()
+        .expr(Expr::column("value").is(Option::<i32>::None))
+        .to_values();
+    assert_eq!(nullable.sql(), "SELECT \"value\" IS NULL");
+    assert!(nullable.values().is_empty());
     let query = Select::new()
         .column("active")
         .from("users")

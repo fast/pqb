@@ -297,6 +297,10 @@ pub enum DropBehavior {
 }
 
 pub(crate) fn write_iden<W: SqlWriter>(w: &mut W, iden: &Iden) {
+    assert!(
+        !iden.name.is_empty() && !iden.name.contains('\0'),
+        "PostgreSQL identifiers must be nonempty and cannot contain NUL bytes"
+    );
     // PostgreSQL uses double quotes for quoting identifiers.
     // @see https://www.postgresql.org/docs/18/sql-syntax-lexical.html#SQL-SYNTAX-IDENTIFIERS
     const QUOTE: char = '"';

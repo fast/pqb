@@ -590,12 +590,17 @@ impl TableSample {
     ///
     /// The percentage should be a value between 0.0 and 100.0.
     pub fn percentage(mut self, percentage: f64) -> Self {
+        assert!(
+            percentage.is_finite() && (0.0..=100.0).contains(&percentage),
+            "sampling percentage must be between 0 and 100"
+        );
         self.percentage = percentage;
         self
     }
 
     /// Set the repeatable seed value.
     pub fn repeatable(mut self, repeatable: f64) -> Self {
+        assert!(repeatable.is_finite(), "sampling seed must be finite");
         self.repeatable = Some(repeatable);
         self
     }
@@ -672,6 +677,10 @@ pub(crate) fn write_select<W: SqlWriter>(w: &mut W, select: &Select) {
     }
 
     if let Some(table_sample) = &select.table_sample {
+        assert!(
+            matches!(select.from.last(), Some(TableRef::Table(..))),
+            "TABLESAMPLE requires a table as the last FROM item"
+        );
         match table_sample.method {
             SampleMethod::BERNOULLI => w.push_str(" TABLESAMPLE BERNOULLI"),
             SampleMethod::SYSTEM => w.push_str(" TABLESAMPLE SYSTEM"),

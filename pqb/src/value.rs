@@ -71,6 +71,40 @@ pub enum Value {
 }
 
 impl Value {
+    pub(crate) fn is_null(&self) -> bool {
+        match self {
+            Self::Bool(value) => value.is_none(),
+            Self::TinyInt(value) => value.is_none(),
+            Self::SmallInt(value) => value.is_none(),
+            Self::Int(value) => value.is_none(),
+            Self::BigInt(value) => value.is_none(),
+            Self::TinyUnsigned(value) => value.is_none(),
+            Self::SmallUnsigned(value) => value.is_none(),
+            Self::Unsigned(value) => value.is_none(),
+            Self::BigUnsigned(value) => value.is_none(),
+            Self::Float(value) => value.is_none(),
+            Self::Double(value) => value.is_none(),
+            Self::String(value) => value.is_none(),
+            Self::Bytes(value) => value.is_none(),
+            Self::Array(value) => value.is_none(),
+            #[cfg(feature = "with-json")]
+            Self::Json(value) => value.is_none(),
+            #[cfg(feature = "with-uuid")]
+            Self::Uuid(value) => value.is_none(),
+            #[cfg(feature = "with-chrono")]
+            Self::Date(value) => value.is_none(),
+            #[cfg(feature = "with-chrono")]
+            Self::Time(value) => value.is_none(),
+            #[cfg(feature = "with-chrono")]
+            Self::Timestamp(value) => value.is_none(),
+            #[cfg(feature = "with-chrono")]
+            Self::TimestampWithTimeZone(value) => value.is_none(),
+            #[cfg(feature = "with-rust_decimal")]
+            Self::Decimal(value) => value.is_none(),
+            Self::TypedArray(_, value) => value.is_none(),
+        }
+    }
+
     /// Create a typed PostgreSQL array, including empty arrays and arrays containing nulls.
     ///
     /// Drivers reject elements whose types do not match the declared element type.

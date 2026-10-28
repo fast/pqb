@@ -270,6 +270,18 @@ where
 
 fn write_create_index<W: SqlWriter>(w: &mut W, index: &CreateIndex) {
     assert!(
+        matches!(&index.table, Some(TableRef::Table(_, None))),
+        "CREATE INDEX requires an unaliased table name"
+    );
+    assert!(
+        !index.columns.is_empty(),
+        "CREATE INDEX requires columns or expressions"
+    );
+    assert!(
+        !index.if_not_exists || index.name.is_some(),
+        "IF NOT EXISTS requires an index name"
+    );
+    assert!(
         !index.primary,
         "primary keys must be created as table constraints"
     );
@@ -329,13 +341,10 @@ fn write_index_columns<W: SqlWriter>(w: &mut W, columns: &[Expr]) {
             w.push_str(", ");
         }
         match col {
-            // Wrap opclass expressions in parentheses for disambiguation
-            Expr::Binary(_, _, _) | Expr::Unary(_, _) => {
-                write_tuple(w, std::slice::from_ref(col));
-            }
-            _ => {
+            Expr::Column(_) | Expr::FunctionCall(_) | Expr::Custom(_) => {
                 write_expr(w, col);
             }
+            _ => write_tuple(w, std::slice::from_ref(col)),
         }
     }
     w.push_str(")");

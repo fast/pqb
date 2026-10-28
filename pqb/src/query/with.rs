@@ -12,6 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use crate::expr::Expr;
+use crate::expr::write_expr;
 use crate::query::Select;
 use crate::query::Statement;
 use crate::query::write_statement;
@@ -70,7 +72,20 @@ impl CommonTableExpression {
     }
 
     /// Sets the CTE VALUES source.
-    pub fn values(mut self, values: Vec<Vec<Value>>) -> Self {
+    pub fn values(self, values: Vec<Vec<Value>>) -> Self {
+        self.expr_values(
+            values
+                .into_iter()
+                .map(|row| row.into_iter().map(Expr::value).collect())
+                .collect(),
+        )
+    }
+
+    /// Set VALUES rows containing expressions, including casts for parameter type inference.
+    ///
+    /// # Panics
+    /// Panics for empty rows or inconsistent row widths.
+    pub fn expr_values(mut self, values: Vec<Vec<Expr>>) -> Self {
         assert!(
             !values.is_empty() && !values[0].is_empty(),
             "CTE VALUES requires nonempty rows"
@@ -126,7 +141,7 @@ impl CommonTableExpression {
 #[derive(Debug, Clone, PartialEq)]
 enum Query {
     Statement(Box<Statement>),
-    Values(Vec<Vec<Value>>),
+    Values(Vec<Vec<Expr>>),
 }
 
 pub(crate) fn write_with<W: crate::writer::SqlWriter>(w: &mut W, with: &With) {
@@ -180,7 +195,7 @@ pub(crate) fn write_with<W: crate::writer::SqlWriter>(w: &mut W, with: &With) {
                         if k > 0 {
                             w.push_str(", ");
                         }
-                        w.push_param(val.clone());
+                        write_expr(w, val);
                     }
                     w.push_char(')');
                 }

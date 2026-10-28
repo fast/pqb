@@ -228,6 +228,30 @@ async fn postgres_executes_bound_queries_and_relational_workflows() -> Result<()
         [10, 10, 17]
     );
 
+    let value_source = CommonTableExpression::new("input")
+        .column("n")
+        .expr_values(vec![
+            vec![Expr::value(2).cast_as("integer")],
+            vec![Expr::value(3).cast_as("integer")],
+        ]);
+    let query = Select::new()
+        .expr(Expr::column("n").sum())
+        .from("input")
+        .with(With::new().cte(value_source))
+        .to_values();
+    assert_eq!(
+        client
+            .query_one(query.sql(), &query.postgres_params())
+            .await?
+            .get::<_, i64>(0),
+        5
+    );
+    let index = pqb::index::CreateIndex::new().table("payments").expr(
+        pqb::expr::Case::new(Expr::column("status").eq("paid"), Expr::column("amount"))
+            .otherwise(0),
+    );
+    client.batch_execute(&index.to_sql()).await?;
+
     let latest = Select::new()
         .column("amount")
         .from("payments")
