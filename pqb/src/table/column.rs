@@ -57,6 +57,7 @@ impl ColumnDef {
 
     /// Set a column type, including extension and user-defined types.
     pub fn column_type(mut self, ty: ColumnType) -> Self {
+        ty.validate();
         self.ty = Some(ty);
         self
     }
@@ -116,26 +117,16 @@ impl ColumnDef {
     ///
     /// ## Panics
     /// This method will panic if the `size` is zero.
-    pub fn char(mut self, size: u32) -> Self {
-        if size == 0 {
-            panic!("Character type size must be greater than zero.");
-        }
-
-        self.ty = Some(ColumnType::Char(size));
-        self
+    pub fn char(self, size: u32) -> Self {
+        self.column_type(ColumnType::Char(size))
     }
 
     /// Set column type as varchar with length.
     ///
     /// ## Panics
     /// This method will panic if the `size` is zero.
-    pub fn varchar(mut self, size: u32) -> Self {
-        if size == 0 {
-            panic!("Character type size must be greater than zero.");
-        }
-
-        self.ty = Some(ColumnType::Varchar(size));
-        self
+    pub fn varchar(self, size: u32) -> Self {
+        self.column_type(ColumnType::Varchar(size))
     }
 
     /// Set column type as text
@@ -187,20 +178,8 @@ impl ColumnDef {
     /// - `scale` is outside -1000..=1000 (negative scales require PostgreSQL 15+),
     /// - `precision` is less than or equal to zero,
     /// - `precision` is greater than 1000.
-    pub fn numeric(mut self, precision: i32, scale: i32) -> Self {
-        assert!(
-            (-1000..=1000).contains(&scale),
-            "Numeric scale must be between -1000 and 1000."
-        );
-        if precision <= 0 {
-            panic!("Numeric precision must be greater than zero.");
-        }
-        if precision > 1000 {
-            panic!("Numeric precision cannot be greater than 1000.");
-        }
-
-        self.ty = Some(ColumnType::Numeric(Some((precision, scale))));
-        self
+    pub fn numeric(self, precision: i32, scale: i32) -> Self {
+        self.column_type(ColumnType::Numeric(Some((precision, scale))))
     }
 
     /// Set column type as unbounded numeric.
@@ -423,6 +402,28 @@ pub enum ColumnType {
     Custom(TableName),
 }
 
+impl ColumnType {
+    fn validate(&self) {
+        match self {
+            Self::Char(size) | Self::Varchar(size) => {
+                assert!(*size > 0, "Character type size must be greater than zero.")
+            }
+            Self::Numeric(Some((precision, scale))) => {
+                assert!(
+                    (1..=1000).contains(precision),
+                    "Numeric precision must be between 1 and 1000."
+                );
+                assert!(
+                    (-1000..=1000).contains(scale),
+                    "Numeric scale must be between -1000 and 1000."
+                );
+            }
+            Self::Array(element) => element.validate(),
+            _ => {}
+        }
+    }
+}
+
 /// Specification of column attributes.
 #[derive(Debug, Clone, Default)]
 #[non_exhaustive]
@@ -475,6 +476,7 @@ pub enum GeneratedColumnKind {
 }
 
 pub(crate) fn write_column_type<W: SqlWriter>(w: &mut W, column_type: &ColumnType) {
+    column_type.validate();
     match column_type {
         ColumnType::Char(size) => {
             w.push_str("char(");
